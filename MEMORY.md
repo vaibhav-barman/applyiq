@@ -44,9 +44,18 @@ A design review before any code was written. Each decision has its reason, so a 
 - D25 The public demo has a registration flag, a seeded account with a synthetic resume, and a global daily token budget. Why: a recruiter must see it work in under a minute, and an open sign-up on a free LLM tier would be drained.
 - D26 Review subagents stay on Sonnet (owner's choice, cost). The owner can switch the session to Opus before `/code-review-feature` for a risky feature such as auth or Graph C. The reviewers preload the project skills so they check against the same conventions.
 
+### Spec 001 decisions (2026-11-17)
+- D27 structlog is the logging library, routed through the standard library so uvicorn's records are JSON too. Why: the allow-list, the event-name check and the redaction are processors in one chain; on bare `logging` they would be hand-written.
+- D28 `pre-commit` moves from the scaffold spec to the CI and pre-commit bullet, as TRACKER.md already had it. `docs/tooling.md` was corrected. Why: the two docs disagreed, and the secret scan and branch guard belong with CI.
+- D29 `.claude/hooks/format_file.py` is linted like any other file, with one `# noqa: S603` (fixed argument list, no shell). No rule is disabled globally. Why: excluding it would let one file escape the checks.
+- D30 The logged `route` is rebuilt from the request: the text before the place where the matched route's own `path_regex` matches, plus the route's `path_format`. A path parameter in a router prefix would put a concrete value in that text, so then only the bare tail template is logged, and `prefix=` may not contain path parameters (fastapi-conventions). Why: FastAPI 0.163 resolves `include_router` lazily, so `scope["route"]` knows only its own tail and the full path is only in private internals. The first version (a shared `API_V1_PREFIX` constant added to the tail) was replaced after review because it logged the wrong route for nested routers and `include_router(prefix=...)`. A test checks every OpenAPI operation against the logged route.
+- D31 `configure_logging` holds `httpx` and `httpcore` at WARNING. Why: they log every request URL with its query string at INFO, which can carry an API key or a search term. Also in SECURITY.md section 6.
+
 ## Conventions discovered
 - Commands run from the repo root. Frontend commands use `npm --prefix frontend ...` so they match the permission rules.
 - Library versions are newer than a model's memory. Check current docs before using an API (`docs/tooling.md` section 3 has the versions seen on 2026-11-17).
+- Every new router must pass `tests/integration/test_route_template.py`, which requests each OpenAPI operation of the real app and checks the logged route equals its template. Do not put path parameters in `prefix=`.
+- To log a new field, add its name to `ALLOWED_KEYS` in `app/core/logging.py`. Any other key is dropped silently, so a field that never shows up in the logs is probably missing from that set.
 
 ## Gotchas
 - LangGraph's checkpointer creates its own tables. Alembic autogenerate will try to drop them unless `env.py` excludes them.
@@ -58,7 +67,14 @@ A design review before any code was written. Each decision has its reason, so a 
 - Safari drops `Secure` cookies on `http://localhost`. Development uses `COOKIE_SECURE=false` and no `__Host-` prefix.
 - Free LLM tiers change without notice. Check the provider's own limits page before relying on a number in these docs.
 - Job API search filters match loosely (a "machine learning" search returns unrelated roles). Filter again on our side.
+- Plain Starlette routes (the dev-only `/api/v1/docs` and `/api/v1/openapi.json`) never get `scope["route"]` from FastAPI's router, so they log `route: "unmatched"`. APIRoutes are fine.
+- A 500 from an unhandled exception is built by Starlette's outermost middleware, outside `RequestContextMiddleware`, so it has no `X-Request-ID` until the Phase 1 problem+json handler sets one (noted in TRACKER.md).
+- The `phone` redaction pattern would hit digit runs in an ISO timestamp or a UUID, so `redact_pii` skips the server-generated `timestamp` and `request_id` keys.
+- Records from other libraries now pass the same key allow-list as ours (their `event` message is kept, `exc_info`, `stack_info` and extras are dropped). If a library's field is missing from the logs, it is not in `ALLOWED_KEYS`.
+- A shell with `APP_ENV` set to a value outside `dev|test|prod` (for example `staging`) makes the whole test suite fail at collection, because `tests/conftest.py` imports `app.main`, which builds `app` from the real environment. Unset it or fix the value.
+- Deferred from the spec 001 review, to pick up later: reject `LOG_LEVEL=DEBUG` when `APP_ENV=prod` and keep third-party loggers at WARNING by default (deploy bullet or the first spec that adds a library that logs request data); `APP_ENV` defaults to `dev`, so a prod deploy that forgets it serves the docs, and secrets must be `SecretStr` so a startup `ValidationError` does not print them (Phase 1 auth spec, with the `change-me` check); the `Server: uvicorn` header should be removed with `--no-server-header` or in Nginx (first deploy bullet). `HEAD /api/v1/health` returns 405 because FastAPI does not add HEAD to GET routes: if the deploy's load balancer probes with HEAD, add a HEAD route then.
 - Claude Code permission rules and hooks are read at startup. Restart the session after editing `.claude/settings.json`.
+- A force-rename in the owner's terminal (`git branch -M`) can move `main` under a running session: during spec 001 the feature branch was renamed to `main`, and two commits landed on it before anyone noticed. Run `git branch --show-current` before every commit. The `no-commit-to-branch` hook (CI and pre-commit bullet) will add a second guard.
 
 ## Open questions
 - Where to host the live demo so it stays up through the job search? New AWS accounts get credits that expire in 6 to 12 months, not twelve free months of EC2. Decide before the "First deploy" bullet in Phase 1. Options to compare then: AWS on credits (keeps AWS on the resume), a student-pack credit host, or a small paid VM.

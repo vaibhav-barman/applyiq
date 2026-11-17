@@ -39,7 +39,7 @@ requires-python = ">=3.14"
 dependencies = []          # added by specs, each pinned with ==
 
 [dependency-groups]
-dev = []                   # ruff, mypy, pytest, pytest-asyncio, pytest-cov, pre-commit
+dev = []                   # ruff, mypy, pytest, pytest-asyncio, pytest-cov, httpx (pre-commit joins in the CI bullet)
 
 [tool.uv]
 package = false
@@ -144,7 +144,7 @@ Until the frontend scaffold has merged, the frontend job is skipped by a path ch
 
 ## 7. Pre-commit outline
 
-`.pre-commit-config.yaml`, installed with `uv run pre-commit install` in the scaffold spec.
+`.pre-commit-config.yaml`, installed with `uv run pre-commit install` in the CI and pre-commit spec (TRACKER Phase 0, bullet 3), which also adds the `pre-commit` package to the `dev` group.
 
 | Hook | Purpose |
 |---|---|

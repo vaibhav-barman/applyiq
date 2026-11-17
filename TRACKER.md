@@ -10,7 +10,7 @@ Hours are estimates at about 15 hours a week. Total to the MVP line: about 170 h
 
 ## Phase 0: Foundation (about 18 h)
 Read `docs/tooling.md` first.
-- [ ] Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
+- [x] Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health` (spec: `.claude/specs/001-backend-scaffold.md`)
 - [ ] Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
 - [ ] CI and pre-commit: GitHub Actions (lint, format check, types, tests, lock check, pip-audit, gitleaks), pre-commit config including the secret scan and no-commit-to-main
 - [ ] Frontend scaffold: Vite + React (JS), React Router, TanStack Query, ESLint/Prettier, Vitest, Vite dev proxy to /api, frontend job added to CI
@@ -18,7 +18,7 @@ Read `docs/tooling.md` first.
 
 ## Phase 1: Auth and first deploy (about 30 h)
 - [ ] Auth API: users + refresh_tokens tables, register/login/refresh/logout/me, Argon2id, access JWT + rotating refresh with reuse detection, HttpOnly cookies
-- [ ] Request hardening: signed double-submit CSRF + Origin check, SlowAPI limits in Redis, trusted proxy headers, problem+json error handler, audit log table and helper
+- [ ] Request hardening: signed double-submit CSRF + Origin check, SlowAPI limits in Redis, trusted proxy headers, problem+json error handler (it must also set `X-Request-ID` on 500s from unhandled exceptions, which Starlette builds outside `RequestContextMiddleware`), audit log table and helper
 - [ ] User-scoped repository pattern with a reusable "another user's resource" test helper
 - [ ] Sign in and Create account pages, protected routes, fetch client with CSRF header and single-flight refresh
 - [ ] First deploy: production Dockerfiles (non-root), Nginx serving `frontend/dist` and proxying `/api` (SSE-safe, security headers), TLS, deploy script, on the chosen host
@@ -75,3 +75,4 @@ Read `docs/job-sources.md` first.
 
 ## Log
 - 2026-11-17 Fable design review applied: docs and Claude Code config corrected, scope cut and reordered. No code yet.
+- 2026-11-17 Spec 001 backend scaffold done: flat layout, pinned dependencies, typed settings, allow-list JSON logging, request-id middleware, `GET /api/v1/health`. 132 tests, reviewed by a code and a security reviewer. Pending merge.

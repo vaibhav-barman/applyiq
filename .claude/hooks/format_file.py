@@ -29,7 +29,8 @@ SKIP_DIRS = {".git", ".venv", "node_modules", "dist"}
 def run(cmd: list[str], cwd: Path) -> None:
     """Run a formatter quietly. A missing tool, an error, or a timeout is fine."""
     try:
-        subprocess.run(
+        # Fixed argument list from main(), no shell.
+        subprocess.run(  # noqa: S603
             cmd, cwd=cwd, capture_output=True, timeout=TIMEOUT_SECONDS, check=False
         )
     except OSError, subprocess.SubprocessError:
@@ -60,9 +61,7 @@ def main() -> None:
     if not isinstance(payload, dict):
         return
 
-    root = Path(
-        os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or "."
-    ).resolve()
+    root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or ".").resolve()
     path = edited_file(payload, root)
     if path is None:
         return
