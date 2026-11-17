@@ -69,9 +69,9 @@ Files changed: `pyproject.toml`, `uv.lock` (new), `README.md` and docs only wher
 
 `ALLOWED_KEYS` starts as: `event, level, timestamp, logger, request_id, method, route, status_code, duration_ms, error_code, error_type, app_env`. A later spec that needs a new key adds it to this one frozenset, which is where a reviewer checks it.
 
-Records from other libraries go through steps 2 and 5 only (their message is free text by nature). `uvicorn.access` is disabled, because it logs raw paths and client addresses; our middleware writes the access line instead.
+Records from other libraries go through steps 2 and 5 only (their message is free text by nature). The `httpx` and `httpcore` loggers are set to WARNING, because they log every request URL, query string included, at INFO. `uvicorn.access` is disabled, because it logs raw paths and client addresses; our middleware writes the access line instead.
 
-**Middleware.** `RequestContextMiddleware` is a pure ASGI middleware (not `BaseHTTPMiddleware`, which would later buffer the SSE stream). Per HTTP request it: clears contextvars, generates a UUID4 request id (an incoming `X-Request-ID` is not trusted), binds it, adds `X-Request-ID` to the response, and logs one `request_completed` line with `method`, `route`, `status_code`, `duration_ms`. `route` is the matched route template (for example `/api/v1/health`), or `unmatched`; never the raw path or the query string. On an unhandled exception it logs `request_failed` with `error_type` (the class name only) and re-raises. Check in the current Starlette docs how the matched route is exposed on the scope before writing this.
+**Middleware.** `RequestContextMiddleware` is a pure ASGI middleware (not `BaseHTTPMiddleware`, which would later buffer the SSE stream). Per HTTP request it: clears contextvars, generates a UUID4 request id (an incoming `X-Request-ID` is not trusted), binds it, adds `X-Request-ID` to the response, and logs one `request_completed` line with `method`, `route`, `status_code`, `duration_ms`. `route` is the matched route template (for example `/api/v1/health`), or `unmatched`; never the raw path or the query string. FastAPI 0.163 resolves `include_router` lazily, so `scope["route"].path` lacks the parent router's `/api/v1` prefix: the middleware prepends the `API_V1_PREFIX` constant (defined in `app/api/routers/__init__.py` and shared with the router and `main.py`) unless the path already starts with it. Plain Starlette routes such as the docs routes never get `scope["route"]` from FastAPI's router, so they log `unmatched` (dev and test only). On an unhandled exception it logs `request_failed` with `error_type` (the class name only) and re-raises. Check in the current Starlette docs how the matched route is exposed on the scope before writing this.
 
 ### Agents (if any)
 None.
@@ -111,8 +111,8 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 - [ ] AC2: `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy app mcp_servers` all exit 0.
 - [ ] AC3: `uv run pytest -q` passes, and a test marked `llm` is deselected by default.
 - [ ] AC4: `GET /api/v1/health` returns 200 with exactly `{"status": "ok"}`.
-- [ ] AC5: Every response carries an `X-Request-ID` header holding a UUID; two requests get different ids; a client-supplied `X-Request-ID` is not echoed.
-- [ ] AC6: A request produces one JSON log line `request_completed` whose keys are all in `ALLOWED_KEYS`, with the same `request_id` as the response header and `route` equal to the route template. A request to an unknown path logs `route: "unmatched"` and not the path.
+- [ ] AC5: Every handled response carries an `X-Request-ID` header holding a UUID; two requests get different ids; a client-supplied `X-Request-ID` is not echoed. A 500 from an unhandled exception is built by Starlette's outermost middleware, outside ours, so it carries no id until the Phase 1 problem+json handler sets one (TRACKER).
+- [ ] AC6: A request produces one JSON log line `request_completed` whose keys are all in `ALLOWED_KEYS`, with the same `request_id` as the response header and `route` equal to the full route template, including the `/api/v1` prefix (FastAPI reports included routes without it, so the middleware adds the shared `API_V1_PREFIX` constant, unless the route's path already starts with it). A request to an unknown path logs `route: "unmatched"` and not the path.
 - [ ] AC7: A log call with a key outside the allow-list emits the line without that key. A log call whose event is not a snake_case identifier emits `invalid_event_name`.
 - [ ] AC8: An email address or phone number inside an allowed string value is emitted as `[redacted]`.
 - [ ] AC9: `Settings` reads `APP_ENV` and `LOG_LEVEL` from the environment, rejects a value outside the allowed set, and loads without error from an env file containing everything in `.env.example`.
@@ -125,7 +125,7 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 - [x] T3: `app/core/config.py` and `tests/unit/test_config.py` (AC9, AC11).
 - [x] T4: `app/core/logging.py` and `tests/unit/test_logging.py` (AC7, AC8).
 - [x] T5: `app/core/middleware.py`, `app/api/schemas/health.py`, `app/api/routers/health.py`, `app/main.py`, `mcp_servers/__init__.py`.
-- [ ] T6: `tests/conftest.py` and `tests/integration/test_health.py` (AC4, AC5, AC6, AC10). AC3's deselection is proved without adding a placeholder `llm` test to the suite: use pytest's `pytester` fixture on a temporary `llm`-marked test.
+- [x] T6: `tests/conftest.py` and `tests/integration/test_health.py` (AC4, AC5, AC6, AC10). AC3's deselection is proved without adding a placeholder `llm` test to the suite: use pytest's `pytester` fixture on a temporary `llm`-marked test.
 - [ ] T7: Run all four checks. Remove stale mentions of `src/` or the `applyiq` script from README and docs. Correct the two `pre-commit` lines in `docs/tooling.md` (sections 2 and 7) per decision 2. Record the three decisions from section 9 in MEMORY.md, and add `ALLOWED_KEYS` as the place to extend logging to MEMORY.md (Conventions).
 
 ## 7. Test plan

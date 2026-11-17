@@ -126,6 +126,12 @@ def test_configuring_twice_does_not_duplicate_lines(stream: io.StringIO) -> None
     assert len(lines(stream)) == 1
 
 
+@pytest.mark.parametrize("name", ["httpx", "httpcore"])
+def test_http_client_libraries_do_not_log_urls(stream: io.StringIO, name: str) -> None:
+    logging.getLogger(name).info('HTTP Request: GET https://api.example.com/?key=secret "200 OK"')
+    assert stream.getvalue() == ""
+
+
 def test_level_filters_records(stream: io.StringIO) -> None:
     structlog.get_logger().debug("too_quiet")
     assert stream.getvalue() == ""

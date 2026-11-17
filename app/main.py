@@ -2,13 +2,13 @@
 
 from fastapi import FastAPI
 
-from app.api.routers import api_v1_router
+from app.api.routers import API_V1_PREFIX, api_v1_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 
-DOCS_URL = "/api/v1/docs"
-OPENAPI_URL = "/api/v1/openapi.json"
+DOCS_URL = f"{API_V1_PREFIX}/docs"
+OPENAPI_URL = f"{API_V1_PREFIX}/openapi.json"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

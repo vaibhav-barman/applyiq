@@ -46,6 +46,10 @@ _REDACTED = "[redacted]"
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
 _UVICORN_ACCESS = "uvicorn.access"
 
+# HTTP client libraries log every request URL, query string included, at INFO. A URL
+# can carry an API key or a search term, so they only log from WARNING up.
+_QUIET_LOGGERS = ("httpx", "httpcore")
+
 _installed_handler: logging.Handler | None = None
 
 
@@ -122,6 +126,8 @@ def configure_logging(level: str, stream: TextIO | None = None) -> None:
     root.setLevel(level)
     _installed_handler = handler
 
+    for name in _QUIET_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
     _route_uvicorn_to_root()
 
 

@@ -4,5 +4,7 @@ from fastapi import APIRouter
 
 from app.api.routers import health
 
-api_v1_router = APIRouter(prefix="/api/v1")
+API_V1_PREFIX = "/api/v1"
+
+api_v1_router = APIRouter(prefix=API_V1_PREFIX)
 api_v1_router.include_router(health.router)

@@ -11,6 +11,8 @@ import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.routers import API_V1_PREFIX
+
 logger = structlog.get_logger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -21,10 +23,17 @@ def _route_template(scope: Scope) -> str:
     """Return the matched route's template, never the raw path or query string.
 
     Starlette's router stores the matched route in `scope["route"]` once it matches.
+    FastAPI resolves routers added with `include_router` lazily, so for those routes
+    `path` lacks the `/api/v1` prefix of the parent router. The prefix is added back
+    here. Routes registered straight on the app (the docs routes) already carry it.
     """
     route = scope.get("route")
     path = getattr(route, "path", None)
-    return path if isinstance(path, str) else UNMATCHED_ROUTE
+    if not isinstance(path, str):
+        return UNMATCHED_ROUTE
+    if path.startswith(API_V1_PREFIX):
+        return path
+    return API_V1_PREFIX + path
 
 
 class RequestContextMiddleware:
