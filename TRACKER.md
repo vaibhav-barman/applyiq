@@ -10,7 +10,7 @@ Hours are estimates at about 15 hours a week. Total to the MVP line: about 170 h
 
 ## Phase 0: Foundation (about 18 h)
 Read `docs/tooling.md` first.
-- [~] Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health` (spec: `.claude/specs/001-backend-scaffold.md`)
+- [x] Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health` (spec: `.claude/specs/001-backend-scaffold.md`)
 - [ ] Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
 - [ ] CI and pre-commit: GitHub Actions (lint, format check, types, tests, lock check, pip-audit, gitleaks), pre-commit config including the secret scan and no-commit-to-main
 - [ ] Frontend scaffold: Vite + React (JS), React Router, TanStack Query, ESLint/Prettier, Vitest, Vite dev proxy to /api, frontend job added to CI
@@ -75,3 +75,4 @@ Read `docs/job-sources.md` first.
 
 ## Log
 - 2026-11-17 Fable design review applied: docs and Claude Code config corrected, scope cut and reordered. No code yet.
+- 2026-11-17 Spec 001 backend scaffold done: flat layout, pinned dependencies, typed settings, allow-list JSON logging, request-id middleware, `GET /api/v1/health`. 132 tests, reviewed by a code and a security reviewer. Pending merge.

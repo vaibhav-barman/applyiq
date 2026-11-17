@@ -54,6 +54,7 @@ A design review before any code was written. Each decision has its reason, so a 
 ## Conventions discovered
 - Commands run from the repo root. Frontend commands use `npm --prefix frontend ...` so they match the permission rules.
 - Library versions are newer than a model's memory. Check current docs before using an API (`docs/tooling.md` section 3 has the versions seen on 2026-11-17).
+- Every new router must pass `tests/integration/test_route_template.py`, which requests each OpenAPI operation of the real app and checks the logged route equals its template. Do not put path parameters in `prefix=`.
 - To log a new field, add its name to `ALLOWED_KEYS` in `app/core/logging.py`. Any other key is dropped silently, so a field that never shows up in the logs is probably missing from that set.
 
 ## Gotchas
@@ -71,7 +72,7 @@ A design review before any code was written. Each decision has its reason, so a 
 - The `phone` redaction pattern would hit digit runs in an ISO timestamp or a UUID, so `redact_pii` skips the server-generated `timestamp` and `request_id` keys.
 - Records from other libraries now pass the same key allow-list as ours (their `event` message is kept, `exc_info`, `stack_info` and extras are dropped). If a library's field is missing from the logs, it is not in `ALLOWED_KEYS`.
 - A shell with `APP_ENV` set to a value outside `dev|test|prod` (for example `staging`) makes the whole test suite fail at collection, because `tests/conftest.py` imports `app.main`, which builds `app` from the real environment. Unset it or fix the value.
-- Deferred from the spec 001 review, to pick up later: reject `LOG_LEVEL=DEBUG` when `APP_ENV=prod` and keep third-party loggers at WARNING by default (deploy bullet or the first spec that adds a library that logs request data); `APP_ENV` defaults to `dev`, so a prod deploy that forgets it serves the docs, and secrets must be `SecretStr` so a startup `ValidationError` does not print them (Phase 1 auth spec, with the `change-me` check); the `Server: uvicorn` header should be removed with `--no-server-header` or in Nginx (first deploy bullet).
+- Deferred from the spec 001 review, to pick up later: reject `LOG_LEVEL=DEBUG` when `APP_ENV=prod` and keep third-party loggers at WARNING by default (deploy bullet or the first spec that adds a library that logs request data); `APP_ENV` defaults to `dev`, so a prod deploy that forgets it serves the docs, and secrets must be `SecretStr` so a startup `ValidationError` does not print them (Phase 1 auth spec, with the `change-me` check); the `Server: uvicorn` header should be removed with `--no-server-header` or in Nginx (first deploy bullet). `HEAD /api/v1/health` returns 405 because FastAPI does not add HEAD to GET routes: if the deploy's load balancer probes with HEAD, add a HEAD route then.
 - Claude Code permission rules and hooks are read at startup. Restart the session after editing `.claude/settings.json`.
 - A force-rename in the owner's terminal (`git branch -M`) can move `main` under a running session: during spec 001 the feature branch was renamed to `main`, and two commits landed on it before anyone noticed. Run `git branch --show-current` before every commit. The `no-commit-to-branch` hook (CI and pre-commit bullet) will add a second guard.
 

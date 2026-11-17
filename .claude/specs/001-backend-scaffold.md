@@ -1,6 +1,6 @@
 # Spec 001: Backend scaffold
 
-Status: Verified
+Status: Done
 Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
 Branch: feat/001-backend-scaffold
 Depends on: none
@@ -152,7 +152,7 @@ None blocking. Three decisions made here, to be recorded in MEMORY.md by `/ship-
 3. **The hook file is linted, not excluded.** If ruff's `S603` fires on the formatter `subprocess.run` call in `.claude/hooks/format_file.py`, it gets a single `# noqa: S603` with the reason on the line (the arguments are a fixed list, no shell). No rule is turned off globally.
 
 ## 10. Implementation notes
-Implemented on branch `feat/001-backend-scaffold`, tasks T1 to T7. Checks at the end: `uv lock --check`, ruff, ruff format, `mypy --strict app mcp_servers` and 40 tests all pass; the `llm` marker deselects by default. A real `uvicorn` run showed JSON-only output, one `request_completed` line per request, and no path or query string in any line.
+Implemented on branch `feat/001-backend-scaffold`, tasks T1 to T7. Checks at the end: `uv lock --check`, ruff, ruff format, `mypy --strict app mcp_servers` and the suite all pass (40 tests at this point, 132 after review); the `llm` marker deselects by default. A real `uvicorn` run showed JSON-only output, one `request_completed` line per request, and no path or query string in any line.
 
 Changes from the spec, all approved by the owner during `/ship-feature`:
 - **Logged route (D30, reworked in review).** FastAPI 0.163 resolves `include_router` lazily, so `scope["route"].path` is only the route's own tail. The first version prepended an `API_V1_PREFIX` constant; review showed it logged the wrong route for nested routers and for `include_router(prefix=...)`. It now recovers the prefix from the request path and the route's `path_regex`, falls back to the bare tail template when a prefix holds a path parameter, and the middleware no longer imports from `app.api`. Tests: nested routers, `include_router` prefixes, path converters, routes registered on the app, the parameter-in-prefix fallback, and a guard that checks every OpenAPI operation of the real app.
@@ -162,9 +162,17 @@ Changes from the spec, all approved by the owner during `/ship-feature`:
 Choices the spec left open:
 - `configure_logging(level, stream=None)` takes the level string and an optional stream (tests pass a buffer). It replaces the handler it installed earlier, so repeated calls do not duplicate lines. It also routes `uvicorn` and `uvicorn.error` to the root handler and disables `uvicorn.access`.
 - `redact_pii` skips the server-generated `timestamp` and `request_id` keys: the phone pattern could otherwise match digits in a timestamp or a UUID (about 0.3 percent of UUID4 ids would have been redacted). The phone pattern needs nine or more digits.
-- The exception traceback key (`exc_info`) is not in `ALLOWED_KEYS`, so tracebacks are never logged. Foreign records emit no traceback either (tested).
+- The exception traceback key (`exc_info`) is not in `ALLOWED_KEYS`, so tracebacks are never logged. Foreign records (uvicorn and others) go through the same allow-list since review, so they emit no traceback or exception message either (tested).
 - `app_env` is in `ALLOWED_KEYS` as the spec lists it, but nothing emits it yet.
 - The dev-only docs routes are plain Starlette routes, which FastAPI's router does not put in `scope["route"]`, so they log `route: "unmatched"`.
 - AC3 is proved with `pytester` in `tests/unit/test_pytest_config.py`, which copies the repo's real `pyproject.toml` into a temporary project, so no placeholder `llm` test is in the suite.
 - T2: ruff flagged S603 in `.claude/hooks/format_file.py` as predicted; it now has the single `# noqa: S603` with the reason.
-- The acceptance criteria checkboxes above are left unticked for `/test-feature`.
+
+Verification (`/test-feature`): all 11 acceptance criteria are covered by tests or commands, 104 tests at that point, 100 percent line and branch coverage of `app/`. Seven deliberate breaks of `app/` were each caught by a test. The owner confirmed the optional terminal check in section 8.
+
+Review (`/code-review-feature`): a code reviewer and a security reviewer each read the full diff in a fresh context. No Blockers. Findings fixed, all chosen by the owner:
+- **Major.** Foreign log records (uvicorn and others) bypassed the key allow-list, so `exc_info` wrote the raw exception message to the log. The email regex was quadratic and reachable through the client-supplied HTTP method (0.75 s for 16,000 characters on the single worker). The logged route was wrong for nested routers and `include_router(prefix=...)`.
+- **Minor.** The HTTP method is logged only when it is a standard verb. Foreign records carry `request_id`. `/docs/oauth2-redirect` is removed. A cancelled request logs `request_cancelled`. Non-scalar values are dropped, strings are cut at 200 characters, and event names match in full with a 64-character cap. The middleware no longer imports from `app.api`. New tests cover uvicorn re-routing and nested routers.
+- After the fixes: 132 tests pass, and 12 deliberate breaks of the new code were each caught by a test.
+
+Left alone, with the reason written in MEMORY.md (Gotchas): an invalid `APP_ENV` in the shell fails test collection (the fix would change the documented run command). Deferred to later specs: rejecting `LOG_LEVEL=DEBUG` in prod and quieting third-party loggers, `APP_ENV` failing open with `SecretStr` for secrets, the `Server: uvicorn` header, and a HEAD route if the deploy's health probe uses HEAD. Skipped as low value: phone-pattern separators of more than two characters.
