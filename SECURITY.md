@@ -62,7 +62,7 @@ ApplyIQ handles resumes (personal data) and feeds untrusted job text into LLMs. 
 
 ## 6. Logging and audit
 - Structured JSON logs with a request id. Log by allow-list: ids, enum values, counts, durations, status and error codes. Never log request bodies, resume or job text, prompts, model output, emails, tokens, or MCP tool arguments. A redaction processor for emails and phone numbers stays on as a second line of defence.
-- Records from other libraries are free text and cannot be allow-listed. `httpx` and `httpcore` log every request URL, query string included, at INFO, and a URL can carry an API key or a search term, so `configure_logging` holds those two loggers at WARNING. Any new HTTP client library gets the same check before it is used.
+- Records from other libraries are free text, but they go through the same key allow-list, value limits and redaction as ours: the message is kept, while `exc_info`, `stack_info` and extra keys are dropped, because an exception message can echo user data (pydantic, psycopg and LLM errors do). `httpx` and `httpcore` log every request URL, query string included, at INFO, and a URL can carry an API key or a search term, so `configure_logging` holds those two loggers at WARNING. Any new HTTP client library gets the same check before it is used. Client-supplied text (the HTTP method) is never logged as sent, and string values are cut at 200 characters.
 - `audit_log` row for: login, logout, profile change (including a fact added from review), draft approve/reject, stage change, account delete, memory saved or deleted (P1). `detail` holds ids and enums only.
 
 ## 7. URL fetching (P1; nothing ships without all of this)

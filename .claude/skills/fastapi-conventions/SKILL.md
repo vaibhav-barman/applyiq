@@ -15,6 +15,7 @@ description: ApplyIQ backend conventions for FastAPI routes, services, SQLAlchem
 - Rate-limit every new route with SlowAPI using the limits in SECURITY.md. Limits are stored in Redis.
 - State-changing routes require the CSRF dependency (signed token in `X-CSRF-Token`, plus the Origin check).
 - No CORS middleware. Development is same-origin through the Vite proxy.
+- No path parameters in a router `prefix=` (`APIRouter(prefix="/applications/{application_id}")` or `include_router(..., prefix=...)`). Put them in the route path instead. The access log rebuilds the route template from the request, and a parameter in a prefix would put its concrete value in the log, so the middleware falls back to a bare, less useful template. `tests/integration/test_route_template.py` checks every route against its OpenAPI template and fails if one drifts.
 - Behind Nginx, read the client IP from the forwarded header only when the request comes from a trusted proxy.
 
 ## Pagination
