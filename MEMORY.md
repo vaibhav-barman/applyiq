@@ -44,9 +44,17 @@ A design review before any code was written. Each decision has its reason, so a 
 - D25 The public demo has a registration flag, a seeded account with a synthetic resume, and a global daily token budget. Why: a recruiter must see it work in under a minute, and an open sign-up on a free LLM tier would be drained.
 - D26 Review subagents stay on Sonnet (owner's choice, cost). The owner can switch the session to Opus before `/code-review-feature` for a risky feature such as auth or Graph C. The reviewers preload the project skills so they check against the same conventions.
 
+### Spec 001 decisions (2026-11-17)
+- D27 structlog is the logging library, routed through the standard library so uvicorn's records are JSON too. Why: the allow-list, the event-name check and the redaction are processors in one chain; on bare `logging` they would be hand-written.
+- D28 `pre-commit` moves from the scaffold spec to the CI and pre-commit bullet, as TRACKER.md already had it. `docs/tooling.md` was corrected. Why: the two docs disagreed, and the secret scan and branch guard belong with CI.
+- D29 `.claude/hooks/format_file.py` is linted like any other file, with one `# noqa: S603` (fixed argument list, no shell). No rule is disabled globally. Why: excluding it would let one file escape the checks.
+- D30 The logged `route` is `API_V1_PREFIX` (in `app/api/routers/__init__.py`) plus `route.path`, unless the path already starts with the prefix. Why: FastAPI 0.163 resolves `include_router` lazily, so `scope["route"].path` lacks the parent prefix, and the full path is only in private FastAPI internals. Routes added to a sub-router with its own `prefix=` keep it.
+- D31 `configure_logging` holds `httpx` and `httpcore` at WARNING. Why: they log every request URL with its query string at INFO, which can carry an API key or a search term. Also in SECURITY.md section 6.
+
 ## Conventions discovered
 - Commands run from the repo root. Frontend commands use `npm --prefix frontend ...` so they match the permission rules.
 - Library versions are newer than a model's memory. Check current docs before using an API (`docs/tooling.md` section 3 has the versions seen on 2026-11-17).
+- To log a new field, add its name to `ALLOWED_KEYS` in `app/core/logging.py`. Any other key is dropped silently, so a field that never shows up in the logs is probably missing from that set.
 
 ## Gotchas
 - LangGraph's checkpointer creates its own tables. Alembic autogenerate will try to drop them unless `env.py` excludes them.
@@ -58,6 +66,9 @@ A design review before any code was written. Each decision has its reason, so a 
 - Safari drops `Secure` cookies on `http://localhost`. Development uses `COOKIE_SECURE=false` and no `__Host-` prefix.
 - Free LLM tiers change without notice. Check the provider's own limits page before relying on a number in these docs.
 - Job API search filters match loosely (a "machine learning" search returns unrelated roles). Filter again on our side.
+- Plain Starlette routes (the dev-only `/api/v1/docs` and `/api/v1/openapi.json`) never get `scope["route"]` from FastAPI's router, so they log `route: "unmatched"`. APIRoutes are fine.
+- A 500 from an unhandled exception is built by Starlette's outermost middleware, outside `RequestContextMiddleware`, so it has no `X-Request-ID` until the Phase 1 problem+json handler sets one (noted in TRACKER.md).
+- The `phone` redaction pattern would hit digit runs in an ISO timestamp or a UUID, so `redact_pii` skips the server-generated `timestamp` and `request_id` keys.
 - Claude Code permission rules and hooks are read at startup. Restart the session after editing `.claude/settings.json`.
 
 ## Open questions

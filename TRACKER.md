@@ -18,7 +18,7 @@ Read `docs/tooling.md` first.
 
 ## Phase 1: Auth and first deploy (about 30 h)
 - [ ] Auth API: users + refresh_tokens tables, register/login/refresh/logout/me, Argon2id, access JWT + rotating refresh with reuse detection, HttpOnly cookies
-- [ ] Request hardening: signed double-submit CSRF + Origin check, SlowAPI limits in Redis, trusted proxy headers, problem+json error handler, audit log table and helper
+- [ ] Request hardening: signed double-submit CSRF + Origin check, SlowAPI limits in Redis, trusted proxy headers, problem+json error handler (it must also set `X-Request-ID` on 500s from unhandled exceptions, which Starlette builds outside `RequestContextMiddleware`), audit log table and helper
 - [ ] User-scoped repository pattern with a reusable "another user's resource" test helper
 - [ ] Sign in and Create account pages, protected routes, fetch client with CSRF header and single-flight refresh
 - [ ] First deploy: production Dockerfiles (non-root), Nginx serving `frontend/dist` and proxying `/api` (SSE-safe, security headers), TLS, deploy script, on the chosen host

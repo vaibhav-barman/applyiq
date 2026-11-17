@@ -1,6 +1,6 @@
 # Spec 001: Backend scaffold
 
-Status: In progress
+Status: Implemented
 Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
 Branch: feat/001-backend-scaffold
 Depends on: none
@@ -126,7 +126,7 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 - [x] T4: `app/core/logging.py` and `tests/unit/test_logging.py` (AC7, AC8).
 - [x] T5: `app/core/middleware.py`, `app/api/schemas/health.py`, `app/api/routers/health.py`, `app/main.py`, `mcp_servers/__init__.py`.
 - [x] T6: `tests/conftest.py` and `tests/integration/test_health.py` (AC4, AC5, AC6, AC10). AC3's deselection is proved without adding a placeholder `llm` test to the suite: use pytest's `pytester` fixture on a temporary `llm`-marked test.
-- [ ] T7: Run all four checks. Remove stale mentions of `src/` or the `applyiq` script from README and docs. Correct the two `pre-commit` lines in `docs/tooling.md` (sections 2 and 7) per decision 2. Record the three decisions from section 9 in MEMORY.md, and add `ALLOWED_KEYS` as the place to extend logging to MEMORY.md (Conventions).
+- [x] T7: Run all four checks. Remove stale mentions of `src/` or the `applyiq` script from README and docs. Correct the two `pre-commit` lines in `docs/tooling.md` (sections 2 and 7) per decision 2. Record the three decisions from section 9 in MEMORY.md, and add `ALLOWED_KEYS` as the place to extend logging to MEMORY.md (Conventions).
 
 ## 7. Test plan
 | Test | Proves |
@@ -149,4 +149,19 @@ None blocking. Three decisions made here, to be recorded in MEMORY.md by `/ship-
 3. **The hook file is linted, not excluded.** If ruff's `S603` fires on the formatter `subprocess.run` call in `.claude/hooks/format_file.py`, it gets a single `# noqa: S603` with the reason on the line (the arguments are a fixed list, no shell). No rule is turned off globally.
 
 ## 10. Implementation notes
-(Filled in by /ship-feature.)
+Implemented on branch `feat/001-backend-scaffold`, tasks T1 to T7. Checks at the end: `uv lock --check`, ruff, ruff format, `mypy --strict app mcp_servers` and 40 tests all pass; the `llm` marker deselects by default. A real `uvicorn` run showed JSON-only output, one `request_completed` line per request, and no path or query string in any line.
+
+Changes from the spec, all approved by the owner during `/ship-feature`:
+- **Logged route (D30).** FastAPI 0.163 resolves `include_router` lazily, so `scope["route"].path` is `/health`, not `/api/v1/health`. The middleware prepends the shared `API_V1_PREFIX` constant (in `app/api/routers/__init__.py`, also used by `main.py`) unless the path already starts with it. AC6 and the middleware design text were updated. Tests: the health route logs the full path, and an `APIRoute` registered on the app with the full path is not prefixed twice.
+- **AC5 reworded** to "every handled response". Starlette's outermost middleware builds the 500 for an unhandled exception, outside ours, so that response has no `X-Request-ID`. TRACKER.md's Phase 1 request hardening bullet now says the problem+json handler must set it.
+- **httpx and httpcore held at WARNING (D31)** in `configure_logging`, because they log request URLs with query strings at INFO. Noted in SECURITY.md section 6.
+
+Choices the spec left open:
+- `configure_logging(level, stream=None)` takes the level string and an optional stream (tests pass a buffer). It replaces the handler it installed earlier, so repeated calls do not duplicate lines. It also routes `uvicorn` and `uvicorn.error` to the root handler and disables `uvicorn.access`.
+- `redact_pii` skips the server-generated `timestamp` and `request_id` keys: the phone pattern could otherwise match digits in a timestamp or a UUID (about 0.3 percent of UUID4 ids would have been redacted). The phone pattern needs nine or more digits.
+- The exception traceback key (`exc_info`) is not in `ALLOWED_KEYS`, so tracebacks are never logged. Foreign records emit no traceback either (tested).
+- `app_env` is in `ALLOWED_KEYS` as the spec lists it, but nothing emits it yet.
+- The dev-only docs routes are plain Starlette routes, which FastAPI's router does not put in `scope["route"]`, so they log `route: "unmatched"`.
+- AC3 is proved with `pytester` in `tests/unit/test_pytest_config.py`, which copies the repo's real `pyproject.toml` into a temporary project, so no placeholder `llm` test is in the suite.
+- T2: ruff flagged S603 in `.claude/hooks/format_file.py` as predicted; it now has the single `# noqa: S603` with the reason.
+- The acceptance criteria checkboxes above are left unticked for `/test-feature`.
