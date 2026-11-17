@@ -107,17 +107,17 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 - Licences checked (table above).
 
 ## 5. Acceptance criteria
-- [ ] AC1: `src/` is gone; `pyproject.toml` has no `[build-system]` or `[project.scripts]`, has `[tool.uv] package = false`, and every dependency is pinned with `==`; `uv.lock` is committed and `uv lock --check` passes.
-- [ ] AC2: `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy app mcp_servers` all exit 0.
-- [ ] AC3: `uv run pytest -q` passes, and a test marked `llm` is deselected by default.
-- [ ] AC4: `GET /api/v1/health` returns 200 with exactly `{"status": "ok"}`.
-- [ ] AC5: Every handled response carries an `X-Request-ID` header holding a UUID; two requests get different ids; a client-supplied `X-Request-ID` is not echoed. A 500 from an unhandled exception is built by Starlette's outermost middleware, outside ours, so it carries no id until the Phase 1 problem+json handler sets one (TRACKER).
-- [ ] AC6: A request produces one JSON log line `request_completed` whose keys are all in `ALLOWED_KEYS`, with the same `request_id` as the response header and `route` equal to the full route template, including the `/api/v1` prefix (FastAPI reports included routes without it, so the middleware adds the shared `API_V1_PREFIX` constant, unless the route's path already starts with it). A request to an unknown path logs `route: "unmatched"` and not the path.
-- [ ] AC7: A log call with a key outside the allow-list emits the line without that key. A log call whose event is not a snake_case identifier emits `invalid_event_name`.
-- [ ] AC8: An email address or phone number inside an allowed string value is emitted as `[redacted]`.
-- [ ] AC9: `Settings` reads `APP_ENV` and `LOG_LEVEL` from the environment, rejects a value outside the allowed set, and loads without error from an env file containing everything in `.env.example`.
-- [ ] AC10: With `APP_ENV=prod`, `/api/v1/docs` and `/api/v1/openapi.json` return 404; with `dev` they return 200.
-- [ ] AC11: No `os.getenv` or `os.environ` under `app/`.
+- [x] AC1: `src/` is gone; `pyproject.toml` has no `[build-system]` or `[project.scripts]`, has `[tool.uv] package = false`, and every dependency is pinned with `==`; `uv.lock` is committed and `uv lock --check` passes.
+- [x] AC2: `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy app mcp_servers` all exit 0.
+- [x] AC3: `uv run pytest -q` passes, and a test marked `llm` is deselected by default.
+- [x] AC4: `GET /api/v1/health` returns 200 with exactly `{"status": "ok"}`.
+- [x] AC5: Every handled response carries an `X-Request-ID` header holding a UUID; two requests get different ids; a client-supplied `X-Request-ID` is not echoed. A 500 from an unhandled exception is built by Starlette's outermost middleware, outside ours, so it carries no id until the Phase 1 problem+json handler sets one (TRACKER).
+- [x] AC6: A request produces one JSON log line `request_completed` whose keys are all in `ALLOWED_KEYS`, with the same `request_id` as the response header and `route` equal to the full route template, including the `/api/v1` prefix (FastAPI reports included routes without it, so the middleware adds the shared `API_V1_PREFIX` constant, unless the route's path already starts with it). A request to an unknown path logs `route: "unmatched"` and not the path.
+- [x] AC7: A log call with a key outside the allow-list emits the line without that key. A log call whose event is not a snake_case identifier emits `invalid_event_name`.
+- [x] AC8: An email address or phone number inside an allowed string value is emitted as `[redacted]`.
+- [x] AC9: `Settings` reads `APP_ENV` and `LOG_LEVEL` from the environment, rejects a value outside the allowed set, and loads without error from an env file containing everything in `.env.example`.
+- [x] AC10: With `APP_ENV=prod`, `/api/v1/docs` and `/api/v1/openapi.json` return 404; with `dev` they return 200.
+- [x] AC11: No `os.getenv` or `os.environ` under `app/`.
 
 ## 6. Implementation tasks
 - [x] T1: Delete `src/`. Rewrite `pyproject.toml` (project table, pinned dependencies, `dev` group, `[tool.uv]`, ruff, mypy, pytest, coverage). Run `uv lock` and `uv sync`. Commit with `uv.lock`.
