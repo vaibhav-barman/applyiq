@@ -17,6 +17,7 @@ Implement spec **$ARGUMENTS** from `.claude/specs/`.
      - backend: `uv run ruff check . && uv run ruff format --check . && uv run mypy app mcp_servers && uv run pytest -q` (leave out a directory that does not exist yet);
      - frontend, once `frontend/` exists: `npm --prefix frontend run lint && npm --prefix frontend test -- --run`;
    - tick the task in the spec;
+   - run `git branch --show-current` immediately before each commit, in the same command as the commit or just before it. If it prints `main`, or anything other than the spec's branch, stop and tell me; do not commit;
    - commit with a conventional message (no co-author lines).
 5. A dependency that is not listed in the spec needs my approval before you add it. Tell me the package, why, and its licence.
 6. If the spec turns out to be wrong or incomplete, stop and explain. Do not silently change the design. Propose a spec edit and wait for my approval.

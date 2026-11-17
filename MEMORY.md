@@ -70,6 +70,7 @@ A design review before any code was written. Each decision has its reason, so a 
 - A 500 from an unhandled exception is built by Starlette's outermost middleware, outside `RequestContextMiddleware`, so it has no `X-Request-ID` until the Phase 1 problem+json handler sets one (noted in TRACKER.md).
 - The `phone` redaction pattern would hit digit runs in an ISO timestamp or a UUID, so `redact_pii` skips the server-generated `timestamp` and `request_id` keys.
 - Claude Code permission rules and hooks are read at startup. Restart the session after editing `.claude/settings.json`.
+- A force-rename in the owner's terminal (`git branch -M`) can move `main` under a running session: during spec 001 the feature branch was renamed to `main`, and two commits landed on it before anyone noticed. Run `git branch --show-current` before every commit. The `no-commit-to-branch` hook (CI and pre-commit bullet) will add a second guard.
 
 ## Open questions
 - Where to host the live demo so it stays up through the job search? New AWS accounts get credits that expire in 6 to 12 months, not twelve free months of EC2. Decide before the "First deploy" bullet in Phase 1. Options to compare then: AWS on credits (keeps AWS on the resume), a student-pack credit host, or a small paid VM.
