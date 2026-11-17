@@ -5,7 +5,7 @@ Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.
 Branch: feat/001-backend-scaffold
 Depends on: none
 Docs read: `docs/tooling.md`; uv project config (`tool.uv.package`), pydantic-settings (`extra`, `_env_file`), pydantic mypy plugin, structlog (stdlib `ProcessorFormatter`, contextvars), pytest-asyncio configuration; PyPI for versions and licences (2026-11-17)
-PR:
+PR: https://github.com/vaibhav-barman/applyiq/pull/1
 
 ## 1. Goal
 After this ships, `uv sync` builds the environment, `uv run uvicorn app.main:app --reload` serves `GET /api/v1/health`, every log line is JSON filtered by an allow-list, and the four backend checks (ruff, format, mypy, pytest) pass on a flat `app/` layout that later specs build on.
