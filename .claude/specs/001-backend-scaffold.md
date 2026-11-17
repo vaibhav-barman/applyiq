@@ -122,7 +122,7 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 ## 6. Implementation tasks
 - [x] T1: Delete `src/`. Rewrite `pyproject.toml` (project table, pinned dependencies, `dev` group, `[tool.uv]`, ruff, mypy, pytest, coverage). Run `uv lock` and `uv sync`. Commit with `uv.lock`.
 - [x] T2: Make `uv run ruff check .` and `ruff format --check .` pass on what already exists, including `.claude/hooks/format_file.py`. Fix findings in the file; see decision 3 in section 9 for the one allowed `noqa`.
-- [ ] T3: `app/core/config.py` and `tests/unit/test_config.py` (AC9, AC11).
+- [x] T3: `app/core/config.py` and `tests/unit/test_config.py` (AC9, AC11).
 - [ ] T4: `app/core/logging.py` and `tests/unit/test_logging.py` (AC7, AC8).
 - [ ] T5: `app/core/middleware.py`, `app/api/schemas/health.py`, `app/api/routers/health.py`, `app/main.py`, `mcp_servers/__init__.py`.
 - [ ] T6: `tests/conftest.py` and `tests/integration/test_health.py` (AC4, AC5, AC6, AC10). AC3's deselection is proved without adding a placeholder `llm` test to the suite: use pytest's `pytester` fixture on a temporary `llm`-marked test.
