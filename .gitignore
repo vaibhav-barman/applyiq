@@ -1,11 +1,19 @@
-# macOS system files
+# macOS
 .DS_Store
 
-# Claude Code local settings & memory
-.claude/
-MEMORY.md
+# Secrets and local environment. Never commit these.
+.env
+.env.*
+!.env.example
+secrets/
 
-# Python environments & cache
+# Personal data: resumes and uploads
+uploads/
+resumes/
+*.pdf
+!tests/fixtures/**/*.pdf
+
+# Python
 .venv/
 venv/
 __pycache__/
@@ -16,3 +24,27 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node and the frontend build
+node_modules/
+frontend/dist/
+frontend/coverage/
+npm-debug.log*
+
+# Claude Code. The project config in .claude/ (commands, agents, skills, hooks,
+# specs, settings.json) IS tracked. Only personal overrides are ignored.
+.claude/settings.local.json
+.claude/worktrees/
+
+# Editors
+.vscode/
+.idea/
+
+# Logs and local data
+*.log
+docker/data/

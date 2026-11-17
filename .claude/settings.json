@@ -1,0 +1,84 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run mypy *)",
+      "Bash(uv run alembic *)",
+      "Bash(uv run pre-commit run *)",
+      "Bash(uv sync *)",
+      "Bash(uv lock *)",
+      "Bash(uv tree *)",
+      "Bash(npm --prefix frontend run *)",
+      "Bash(npm --prefix frontend test *)",
+      "Bash(npm --prefix frontend ci)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker compose config *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git switch *)",
+      "Bash(git checkout -b *)",
+      "Bash(git pull --ff-only *)",
+      "Bash(git fetch *)",
+      "Bash(git branch *)",
+      "Bash(git merge main)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
+      "Bash(git remote -v)",
+      "Bash(git remote get-url *)",
+      "Bash(gh auth status)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(git branch -D *)",
+      "Bash(uv add *)",
+      "Bash(uv remove *)",
+      "Bash(npm --prefix frontend install *)",
+      "Bash(docker compose up *)",
+      "Bash(docker compose down *)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(!.env.example)",
+      "Read(./secrets/**)",
+      "Read(./uploads/**)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git commit -n *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/format_file.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -19,10 +19,10 @@ Spend boldness in one place (the paper). Keep the rest disciplined.
 
 No accent color. State is shown with weight, fill, and pattern, never hue:
 - Fit score: strong = solid black badge with white number; medium = black outline; weak = graphite text. Number always shown.
-- Grounded claim: solid underline. Ungrounded or flagged claim: dashed underline plus an inline note.
+- Grounded claim: solid underline. Ungrounded or flagged claim: dashed underline plus an inline note saying why. A draft with an unresolved flagged claim cannot be approved.
 - Errors: black text with a 2px left rule, plain explanation, and the fix.
 
-Dark mode inverts ink and paper; desk becomes #141414 only in dark mode.
+Dark mode inverts ink and paper; desk becomes #141414 only in dark mode. Dark mode is P1: build the light theme only, but put every color in a CSS variable so the dark theme is a small later change.
 
 ### Type
 - **UI: Schibsted Grotesk** (400, 500, 700). Labels, navigation, tables, buttons. Tabular figures for scores and dates (`font-variant-numeric: tabular-nums`).
@@ -73,11 +73,15 @@ On mobile the three columns stack: job summary, paper, then timeline in a collap
 1. **Sign in / Create account**: one centered column, the wordmark set in Newsreader, two fields.
 2. **Profile**: parsed resume as editable sections. Low-confidence fields show a dashed outline and "Check this".
 3. **Preferences**: roles, remote only, locations, salary floor, deal-breakers.
-4. **Job feed**: ruled list, fit badge, top two reasons, filters, "Paste a job".
-5. **Job detail**: description plus fit breakdown (skills, seniority, constraints) with reasons for and against.
-6. **Application workspace**: described above. Edits happen on the paper directly. "Show changes" toggles a diff against the previous version (strikethrough for removed, underline for added).
-7. **Pipeline**: columns Saved, Preparing, Ready, Applied, Interview, Offer, Rejected. Overdue follow-ups get a solid black dot and "Follow up".
-8. **Settings**: model provider, memory list with delete, data export, delete account.
+4. **Job feed**: ruled list, fit badge, top two reasons, filters, "Paste a job". The location line ends with the listing's source as a link, for example "Remote, India · Himalayas" (the job APIs require a visible credit).
+5. **Job detail**: description plus fit breakdown (skills, seniority, constraints) with reasons for and against. Under the title: "Listing from Himalayas" as a link. "Apply" opens the source's own link in a new tab; ApplyIQ never submits anything.
+6. **Application workspace**: described above.
+   - Selecting a solid-underlined claim shows the profile facts it cites. A dashed claim shows its note and three actions: "Remove", "Edit", "This is true, add to my profile". "Approve draft" stays disabled, with a line saying how many claims are left, until every dashed claim is resolved.
+   - Editing: "Edit" swaps the document for a textarea styled exactly like the paper (same serif, size, line height, margins). "Save changes" swaps it back. Never use `contentEditable`.
+   - The third action is "Request changes" with a short text box when the user wants a redraft, and "Reject" to discard.
+   - P1: "Show changes" toggles a diff against the previous version (strikethrough for removed, underline for added).
+7. **Pipeline**: columns Saved, Preparing, Ready, Applied, Interview, Offer, Rejected. Each card has a "Move to" button that opens the list of stages; there is no drag and drop in the MVP. Overdue follow-ups get a solid black dot and "Follow up".
+8. **Settings**: delete account in the MVP. P1 adds model provider, memory list with delete, and data export.
 
 ## 5. Copy rules
 - Name things by what the user does: "Prepare application", "Approve draft", "Move to Applied".
@@ -94,7 +98,7 @@ WCAG AA contrast (graphite on paper passes at body size), visible 2px ink focus 
 - React 18 + Vite, **JavaScript (JSX), not TypeScript**.
 - React Router for pages; TanStack Query for server state; no global state library.
 - Plain CSS with CSS variables for tokens (`src/styles/tokens.css`) and CSS Modules per component. No Tailwind, no UI kit.
-- Streaming via `EventSource` (SSE) from `/api/v1/applications/{id}/stream`.
+- Streaming via `EventSource` (SSE) from `/api/v1/applications/{id}/stream`. Each event carries a fixed `code`; the frontend maps codes to the progress lines in section 5 and never prints model-written text as progress. Event format: `docs/application-prep.md` section 7.
 - Components small and presentational; data fetching lives in `src/api/` hooks.
 - Folder: `frontend/src/{api, components, pages, styles, lib}`.
 
@@ -103,10 +107,12 @@ WCAG AA contrast (graphite on paper passes at body size), visible 2px ink focus 
 - Cursor pagination: `?limit=&cursor=` returning `next_cursor`.
 - Errors use problem+json with a stable `code`; the frontend maps codes to plain messages.
 - Idempotency-Key header on `POST /applications/{id}/prepare`.
+- One review endpoint, `POST /applications/{id}/review`, carries the whole decision (approve, request changes or reject, plus any edits and flag resolutions). There are no per-draft approve or reject endpoints.
 
 ## 9. Prompt design
 - Prompts live in `app/llm/prompts/` as versioned files, never inline.
 - Structured output via Pydantic for every extraction and scoring call.
-- Drafting prompts receive only profile facts, job text, and memories, each labeled by source.
-- Job text is wrapped in untrusted-content delimiters (see SECURITY.md).
+- Drafting prompts receive only profile facts (each with its id), the structured job brief, and memories, each labeled by source. Raw job text goes only to the job-brief extraction call.
+- Drafts come back as segments that cite fact ids, never as one block of prose (see `docs/application-prep.md` section 8).
+- Job text and job-brief fields are wrapped in untrusted-content delimiters (see SECURITY.md).
 - Low temperature for extraction and scoring, moderate for drafting.
