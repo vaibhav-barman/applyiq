@@ -1,6 +1,6 @@
 # Spec 001: Backend scaffold
 
-Status: Approved
+Status: In progress
 Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
 Branch: feat/001-backend-scaffold
 Depends on: none
@@ -120,7 +120,7 @@ All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot r
 - [ ] AC11: No `os.getenv` or `os.environ` under `app/`.
 
 ## 6. Implementation tasks
-- [ ] T1: Delete `src/`. Rewrite `pyproject.toml` (project table, pinned dependencies, `dev` group, `[tool.uv]`, ruff, mypy, pytest, coverage). Run `uv lock` and `uv sync`. Commit with `uv.lock`.
+- [x] T1: Delete `src/`. Rewrite `pyproject.toml` (project table, pinned dependencies, `dev` group, `[tool.uv]`, ruff, mypy, pytest, coverage). Run `uv lock` and `uv sync`. Commit with `uv.lock`.
 - [ ] T2: Make `uv run ruff check .` and `ruff format --check .` pass on what already exists, including `.claude/hooks/format_file.py`. Fix findings in the file; see decision 3 in section 9 for the one allowed `noqa`.
 - [ ] T3: `app/core/config.py` and `tests/unit/test_config.py` (AC9, AC11).
 - [ ] T4: `app/core/logging.py` and `tests/unit/test_logging.py` (AC7, AC8).
