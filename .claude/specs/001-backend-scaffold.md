@@ -1,0 +1,152 @@
+# Spec 001: Backend scaffold
+
+Status: Approved
+Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
+Branch: feat/001-backend-scaffold
+Depends on: none
+Docs read: `docs/tooling.md`; uv project config (`tool.uv.package`), pydantic-settings (`extra`, `_env_file`), pydantic mypy plugin, structlog (stdlib `ProcessorFormatter`, contextvars), pytest-asyncio configuration; PyPI for versions and licences (2026-11-17)
+PR:
+
+## 1. Goal
+After this ships, `uv sync` builds the environment, `uv run uvicorn app.main:app --reload` serves `GET /api/v1/health`, every log line is JSON filtered by an allow-list, and the four backend checks (ruff, format, mypy, pytest) pass on a flat `app/` layout that later specs build on.
+
+## 2. Scope
+In scope:
+- Delete `src/`; rewrite `pyproject.toml` to the non-package shape in `docs/tooling.md` section 2; commit `uv.lock`.
+- Tool config for ruff, mypy (strict, pydantic plugin), pytest, coverage.
+- `app/core/config.py`: typed settings for the variables this spec uses (`APP_ENV`, `LOG_LEVEL`).
+- `app/core/logging.py`: JSON logs, allow-list of keys, email and phone redaction, request id.
+- `app/main.py` with an app factory, request-id and access-log middleware, `GET /api/v1/health`.
+- Tests for config, logging and the health route.
+
+Out of scope (explicitly not doing):
+- Postgres, Redis, Alembic, docker-compose (Phase 0 bullet 2). Health does not check the database yet.
+- CI workflow and pre-commit, including the `pre-commit` package (bullet 3).
+- problem+json error handler, rate limits, CSRF, auth, audit log (Phase 1). The health route is unauthenticated and not rate-limited until SlowAPI lands.
+- Settings for variables no code reads yet (database, auth, LLM, storage). Each later spec declares its own. The "refuse to start in prod with a `change-me` secret" check arrives with the first secret (auth).
+- Empty placeholder packages for `services/`, `db/`, `graphs/`, `llm/`, `grounding/`, `mcp_clients/`. They are created by the spec that first puts code in them.
+
+## 3. Design
+### Backend
+Files created:
+```
+app/__init__.py
+app/main.py                    create_app(settings) factory + module-level `app`
+app/api/__init__.py
+app/api/routers/__init__.py
+app/api/routers/health.py      GET /health
+app/api/schemas/__init__.py
+app/api/schemas/health.py      HealthResponse
+app/core/__init__.py
+app/core/config.py             Settings, get_settings()
+app/core/logging.py            configure_logging(), processors, ALLOWED_KEYS
+app/core/middleware.py         RequestContextMiddleware (pure ASGI)
+mcp_servers/__init__.py        docstring only, so `mypy app mcp_servers` runs as documented
+tests/conftest.py              settings, app and httpx client fixtures
+tests/unit/test_config.py
+tests/unit/test_logging.py
+tests/integration/test_health.py
+```
+Files changed: `pyproject.toml`, `uv.lock` (new), `README.md` and docs only where they still mention `src/` or the `applyiq` script. Deleted: `src/`.
+
+**pyproject.toml.** Remove `[build-system]`, `[project.scripts]`, `readme` and `authors`. Add `[tool.uv] package = false`, a real `description`, `requires-python = ">=3.14"`, the pinned dependencies below, and the tool sections from `docs/tooling.md` section 2 with these additions:
+- pytest: `asyncio_default_fixture_loop_scope = "function"` (pytest-asyncio warns when it is unset), `addopts = "-m 'not llm' --import-mode=importlib"` so `tests/unit` and `tests/integration` can hold files with the same name.
+- coverage: `[tool.coverage.run] source = ["app"]`, `branch = true`. No threshold yet; the 80% target applies to packages that do not exist.
+- `[tool.pydantic-mypy] init_forbid_extra = true`, `init_typed = true`.
+
+**Endpoint.** `GET /api/v1/health` -> `200 {"status": "ok"}`. Response model `HealthResponse(status: Literal["ok"])`. No request body, no auth, no service layer (there is no logic to put in one). The router is mounted under an `/api/v1` parent router that later specs add to.
+
+**App factory.** `create_app(settings: Settings | None = None) -> FastAPI` calls `configure_logging`, adds the middleware, includes the v1 router. Tests pass their own settings; `app = create_app()` at module level is what uvicorn imports. OpenAPI and docs are served at `/api/v1/openapi.json` and `/api/v1/docs` when `APP_ENV` is `dev` or `test`, and turned off in `prod` (the production CSP would block the docs page anyway).
+
+**Config.** `Settings(BaseSettings)` with `app_env: Literal["dev", "test", "prod"] = "dev"` and `log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"`. `SettingsConfigDict(env_file=".env", extra="ignore")`: pydantic-settings defaults to `extra="forbid"` and would raise on every `.env` variable not yet declared. `get_settings()` is cached with `functools.lru_cache`. No `os.getenv` anywhere.
+
+**Logging.** structlog routed through the standard library with `structlog.stdlib.ProcessorFormatter`, one stdout handler on the root logger, `JSONRenderer` last. This makes uvicorn's and later SQLAlchemy's records JSON too. Processor chain for our own loggers:
+1. `merge_contextvars` (carries `request_id`)
+2. add level, logger name, ISO-8601 UTC timestamp
+3. `check_event_name`: `event` must match `^[a-z][a-z0-9_]*$`, otherwise it is replaced with `invalid_event_name`. This stops an f-string with user data from being used as the message.
+4. `drop_unlisted_keys`: removes every key not in `ALLOWED_KEYS`.
+5. `redact_pii`: replaces email addresses and phone-like digit runs in any string value with `[redacted]` (second line of defence, SECURITY.md section 6).
+
+`ALLOWED_KEYS` starts as: `event, level, timestamp, logger, request_id, method, route, status_code, duration_ms, error_code, error_type, app_env`. A later spec that needs a new key adds it to this one frozenset, which is where a reviewer checks it.
+
+Records from other libraries go through steps 2 and 5 only (their message is free text by nature). `uvicorn.access` is disabled, because it logs raw paths and client addresses; our middleware writes the access line instead.
+
+**Middleware.** `RequestContextMiddleware` is a pure ASGI middleware (not `BaseHTTPMiddleware`, which would later buffer the SSE stream). Per HTTP request it: clears contextvars, generates a UUID4 request id (an incoming `X-Request-ID` is not trusted), binds it, adds `X-Request-ID` to the response, and logs one `request_completed` line with `method`, `route`, `status_code`, `duration_ms`. `route` is the matched route template (for example `/api/v1/health`), or `unmatched`; never the raw path or the query string. On an unhandled exception it logs `request_failed` with `error_type` (the class name only) and re-raises. Check in the current Starlette docs how the matched route is exposed on the scope before writing this.
+
+### Agents (if any)
+None.
+
+### Frontend (if any)
+None.
+
+### New dependencies (need approval)
+The standard library has no ASGI framework, settings loader or test runner; all of these are the stack named in ARCHITECTURE.md except structlog and httpx.
+
+| Package | Version | Licence | Why |
+|---|---|---|---|
+| fastapi | 0.163.1 | MIT | API framework (ARCHITECTURE section 1) |
+| uvicorn | 0.54.0 | BSD-3-Clause | ASGI server. Plain, not `[standard]`: fewer packages, `--reload` still works |
+| pydantic | 2.14.3 | MIT | Imported directly for schemas, so pinned directly |
+| pydantic-settings | 2.16.3 | MIT | Config (RULES code standards) |
+| structlog | 26.1.0 | MIT OR Apache-2.0 | Processor chain for the allow-list and redaction, contextvars for the request id. Doing this on bare `logging` means hand-writing the same pieces |
+| ruff (dev) | 0.17.5 | MIT | Lint and format |
+| mypy (dev) | 2.4.1 | MIT | Types |
+| pytest (dev) | 9.2.0 | MIT | Tests |
+| pytest-asyncio (dev) | 1.5.0 | Apache-2.0 | Async tests |
+| pytest-cov (dev) | 7.1.0 | MIT | Coverage |
+| httpx (dev) | 0.28.1 | BSD-3-Clause | `AsyncClient` against the app in tests (fastapi-conventions skill) |
+
+All have Python 3.14 support on PyPI; none is GPL or AGPL. If `uv lock` cannot resolve these exact pins together, stop and report rather than loosening a pin.
+
+## 4. Security
+- Inputs: the health route takes none. The incoming `X-Request-ID` header is untrusted and ignored.
+- Auth, CSRF, rate limits: not applicable to a read-only liveness route with no data. SlowAPI arrives in Phase 1 (SECURITY.md section 5); health is added to the general limit then.
+- Logging (SECURITY.md section 6): allow-list enforced in code and tested; no request bodies, raw paths, query strings, headers or client IPs are logged; the redaction processor is on.
+- Secrets: none added. `.env` stays git-ignored; tests never read it (`Settings(_env_file=None)`).
+- Docs endpoints off in prod.
+- Licences checked (table above).
+
+## 5. Acceptance criteria
+- [ ] AC1: `src/` is gone; `pyproject.toml` has no `[build-system]` or `[project.scripts]`, has `[tool.uv] package = false`, and every dependency is pinned with `==`; `uv.lock` is committed and `uv lock --check` passes.
+- [ ] AC2: `uv run ruff check .`, `uv run ruff format --check .` and `uv run mypy app mcp_servers` all exit 0.
+- [ ] AC3: `uv run pytest -q` passes, and a test marked `llm` is deselected by default.
+- [ ] AC4: `GET /api/v1/health` returns 200 with exactly `{"status": "ok"}`.
+- [ ] AC5: Every response carries an `X-Request-ID` header holding a UUID; two requests get different ids; a client-supplied `X-Request-ID` is not echoed.
+- [ ] AC6: A request produces one JSON log line `request_completed` whose keys are all in `ALLOWED_KEYS`, with the same `request_id` as the response header and `route` equal to the route template. A request to an unknown path logs `route: "unmatched"` and not the path.
+- [ ] AC7: A log call with a key outside the allow-list emits the line without that key. A log call whose event is not a snake_case identifier emits `invalid_event_name`.
+- [ ] AC8: An email address or phone number inside an allowed string value is emitted as `[redacted]`.
+- [ ] AC9: `Settings` reads `APP_ENV` and `LOG_LEVEL` from the environment, rejects a value outside the allowed set, and loads without error from an env file containing everything in `.env.example`.
+- [ ] AC10: With `APP_ENV=prod`, `/api/v1/docs` and `/api/v1/openapi.json` return 404; with `dev` they return 200.
+- [ ] AC11: No `os.getenv` or `os.environ` under `app/`.
+
+## 6. Implementation tasks
+- [ ] T1: Delete `src/`. Rewrite `pyproject.toml` (project table, pinned dependencies, `dev` group, `[tool.uv]`, ruff, mypy, pytest, coverage). Run `uv lock` and `uv sync`. Commit with `uv.lock`.
+- [ ] T2: Make `uv run ruff check .` and `ruff format --check .` pass on what already exists, including `.claude/hooks/format_file.py`. Fix findings in the file; see decision 3 in section 9 for the one allowed `noqa`.
+- [ ] T3: `app/core/config.py` and `tests/unit/test_config.py` (AC9, AC11).
+- [ ] T4: `app/core/logging.py` and `tests/unit/test_logging.py` (AC7, AC8).
+- [ ] T5: `app/core/middleware.py`, `app/api/schemas/health.py`, `app/api/routers/health.py`, `app/main.py`, `mcp_servers/__init__.py`.
+- [ ] T6: `tests/conftest.py` and `tests/integration/test_health.py` (AC4, AC5, AC6, AC10). AC3's deselection is proved without adding a placeholder `llm` test to the suite: use pytest's `pytester` fixture on a temporary `llm`-marked test.
+- [ ] T7: Run all four checks. Remove stale mentions of `src/` or the `applyiq` script from README and docs. Correct the two `pre-commit` lines in `docs/tooling.md` (sections 2 and 7) per decision 2. Record the three decisions from section 9 in MEMORY.md, and add `ALLOWED_KEYS` as the place to extend logging to MEMORY.md (Conventions).
+
+## 7. Test plan
+| Test | Proves |
+|---|---|
+| `tests/unit/test_config.py`: defaults; env override via `monkeypatch`; invalid `APP_ENV` raises; env file copied from `.env.example` loads | AC9 |
+| `tests/unit/test_config.py`: scan `app/**/*.py` for `os.getenv` / `os.environ` | AC11 |
+| `tests/unit/test_logging.py`: capture stdout, parse JSON; unlisted key dropped; bad event name replaced; email and phone redacted; bound `request_id` present | AC7, AC8 |
+| `tests/integration/test_health.py`: httpx `AsyncClient` with `ASGITransport` on `create_app(test_settings)`; status and body; header checks; captured access line; unknown path; docs on and off | AC4, AC5, AC6, AC10 |
+| Commands run in `/ship-feature` and `/test-feature`: `uv lock --check`, ruff, format, mypy, pytest | AC1, AC2, AC3 |
+
+No graph, grounding or cross-user tests apply: there are no graphs and no user data yet.
+
+## 8. Manual checks (owner)
+No browser checks. One optional terminal check: run `uv run uvicorn app.main:app --reload`, then `curl -i localhost:8000/api/v1/health`, and confirm the terminal shows a single-line JSON `request_completed` entry and no plain-text access line.
+
+## 9. Open questions
+None blocking. Three decisions made here, to be recorded in MEMORY.md by `/ship-feature` if approved:
+1. **structlog** is the logging library (the docs said "structured JSON logs" and "redaction processor" without naming one).
+2. **pre-commit moves to bullet 3.** `docs/tooling.md` sections 2 and 7 place the `pre-commit` package and its install in "the scaffold spec", while TRACKER.md puts pre-commit in the CI bullet. This spec follows TRACKER.md, and T7 corrects the two lines in `docs/tooling.md`.
+3. **The hook file is linted, not excluded.** If ruff's `S603` fires on the formatter `subprocess.run` call in `.claude/hooks/format_file.py`, it gets a single `# noqa: S603` with the reason on the line (the arguments are a fixed list, no shell). No rule is turned off globally.
+
+## 10. Implementation notes
+(Filled in by /ship-feature.)
