@@ -201,3 +201,23 @@ async def test_prod_has_no_docs_route_and_logs_it_as_unmatched(
     assert response.status_code == 404
     [entry] = parse_log_lines(log_stream)
     assert entry["route"] == "unmatched"
+
+
+@pytest.mark.parametrize("method", ["BREW", "user.name-secret", "A" * 15_000])
+async def test_unknown_method_is_logged_as_other(
+    client: httpx.AsyncClient, log_stream: io.StringIO, method: str
+) -> None:
+    """The method is client-supplied text, so it must never be logged as sent."""
+    response = await client.request(method, "/api/v1/health")
+    assert response.status_code == 405
+    [entry] = parse_log_lines(log_stream)
+    assert entry["method"] == "other"
+    assert "user.name-secret" not in log_stream.getvalue()
+    assert "AAAA" not in log_stream.getvalue()
+
+
+async def test_swagger_oauth2_redirect_route_does_not_exist(
+    client: httpx.AsyncClient,
+) -> None:
+    """In dev the docs used to add /docs/oauth2-redirect, outside /api/v1."""
+    assert (await client.get("/docs/oauth2-redirect")).status_code == 404

@@ -3,13 +3,14 @@
 import io
 import json
 import logging
+import time
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 import structlog
 
-from app.core.logging import ALLOWED_KEYS, configure_logging
+from app.core.logging import ALLOWED_KEYS, MAX_VALUE_LENGTH, configure_logging, redact_pii
 
 
 @pytest.fixture
@@ -107,12 +108,50 @@ def test_foreign_records_are_json_and_redacted(stream: io.StringIO) -> None:
     assert entry["logger"] == "some.library"
 
 
-def test_foreign_exception_has_no_traceback(stream: io.StringIO) -> None:
+def test_foreign_exception_has_no_traceback_or_message(stream: io.StringIO) -> None:
+    """exc_info and stack_info carry the exception message, which can echo user data."""
     try:
-        raise ValueError("boom")
+        raise ValueError("resume says jane@example.com and 555 123 4567 token=abc")
     except ValueError:
-        logging.getLogger("some.library").exception("library_failed")
-    assert "Traceback" not in stream.getvalue()
+        logging.getLogger("uvicorn.error").error(
+            "Exception in ASGI application", exc_info=True, stack_info=True
+        )
+    output = stream.getvalue()
+    [entry] = lines(stream)
+    assert entry["event"] == "Exception in ASGI application"
+    assert set(entry) <= ALLOWED_KEYS
+    for leaked in ("Traceback", "resume says", "jane", "555", "token=abc", "exc_info"):
+        assert leaked not in output
+
+
+def test_foreign_records_carry_the_request_id(stream: io.StringIO) -> None:
+    structlog.contextvars.bind_contextvars(request_id="abc")
+    logging.getLogger("uvicorn.error").warning("Invalid HTTP request received.")
+    [entry] = lines(stream)
+    assert entry["request_id"] == "abc"
+
+
+def test_foreign_extra_keys_are_dropped(stream: io.StringIO) -> None:
+    logging.getLogger("some.library").warning("something", extra={"body": "resume text"})
+    [entry] = lines(stream)
+    assert "body" not in entry
+    assert "resume text" not in stream.getvalue()
+
+
+def test_uvicorn_loggers_are_rerouted_to_the_json_handler(stream: io.StringIO) -> None:
+    """uvicorn installs its own handler on `uvicorn` and stops propagation."""
+    own_output = io.StringIO()
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_logger.addHandler(logging.StreamHandler(own_output))
+    uvicorn_logger.propagate = False
+
+    configure_logging("INFO", stream=stream)
+    logging.getLogger("uvicorn.error").info("Started server process")
+
+    assert own_output.getvalue() == ""
+    [entry] = lines(stream)
+    assert entry["logger"] == "uvicorn.error"
+    assert entry["event"] == "Started server process"
 
 
 def test_uvicorn_access_log_is_silenced(stream: io.StringIO) -> None:
@@ -135,3 +174,49 @@ def test_http_client_libraries_do_not_log_urls(stream: io.StringIO, name: str) -
 def test_level_filters_records(stream: io.StringIO) -> None:
     structlog.get_logger().debug("too_quiet")
     assert stream.getvalue() == ""
+
+
+def test_non_scalar_values_are_dropped(stream: io.StringIO) -> None:
+    structlog.get_logger().info(
+        "something_happened", error_code=["jane@example.com"], error_type={"a": "b"}
+    )
+    [entry] = lines(stream)
+    assert "error_code" not in entry
+    assert "error_type" not in entry
+    assert "jane" not in stream.getvalue()
+
+
+def test_long_strings_are_truncated(stream: io.StringIO) -> None:
+    structlog.get_logger().info("something_happened", error_code="x" * 5000)
+    [entry] = lines(stream)
+    assert entry["error_code"] == "x" * MAX_VALUE_LENGTH + "[truncated]"
+
+
+@pytest.mark.parametrize("bad_event", ["trailing_newline\n", "a" * 65, "with space", "UPPER"])
+def test_event_name_must_match_in_full_and_be_short(stream: io.StringIO, bad_event: str) -> None:
+    structlog.get_logger().info(bad_event)
+    [entry] = lines(stream)
+    assert entry["event"] == "invalid_event_name"
+
+
+def test_longest_allowed_event_name_is_kept(stream: io.StringIO) -> None:
+    structlog.get_logger().info("a" * 64)
+    [entry] = lines(stream)
+    assert entry["event"] == "a" * 64
+
+
+@pytest.mark.parametrize("payload", ["A" * 200_000, "a.b" * 70_000, "@" * 50_000])
+def test_redaction_stays_fast_on_hostile_input(stream: io.StringIO, payload: str) -> None:
+    """The email pattern used to be quadratic: 16,000 characters took 0.75 s."""
+    started = time.perf_counter()
+    structlog.get_logger().info("something_happened", error_code=payload)
+    logging.getLogger("some.library").warning(payload)
+    assert time.perf_counter() - started < 1.0
+
+
+@pytest.mark.parametrize("payload", ["A" * 30_000, "a.b" * 10_000])
+def test_email_pattern_alone_is_linear(payload: str) -> None:
+    """Truncation would hide a slow pattern, so call the processor directly."""
+    started = time.perf_counter()
+    redact_pii(None, "info", {"event": payload})
+    assert time.perf_counter() - started < 1.0

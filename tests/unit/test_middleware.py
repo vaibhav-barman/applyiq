@@ -1,5 +1,6 @@
 """RequestContextMiddleware behaviour that does not need the whole app (AC5, AC6)."""
 
+import asyncio
 import io
 from collections.abc import Iterator
 
@@ -110,3 +111,23 @@ async def test_failure_logs_class_name_only_and_reraises(log_stream: io.StringIO
     assert "status_code" not in entry
     assert "555" not in log_stream.getvalue()
     assert "/secret" not in log_stream.getvalue()
+
+
+async def test_cancelled_request_is_logged_and_the_cancellation_propagates(
+    log_stream: io.StringIO,
+) -> None:
+    """A client that disconnects cancels the handler. It used to log nothing."""
+    configure_logging("INFO", stream=log_stream)
+
+    async def inner(scope: Scope, receive: Receive, send: Send) -> None:
+        raise asyncio.CancelledError
+
+    scope: Scope = {"type": "http", "method": "GET", "path": "/x", "headers": []}
+    with pytest.raises(asyncio.CancelledError):
+        await RequestContextMiddleware(inner)(scope, no_receive, no_send)
+
+    [entry] = parse_log_lines(log_stream)
+    assert entry["event"] == "request_cancelled"
+    assert entry["method"] == "GET"
+    assert entry["route"] == "unmatched"
+    assert "status_code" not in entry

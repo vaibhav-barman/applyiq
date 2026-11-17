@@ -36,11 +36,16 @@ ALLOWED_KEYS: frozenset[str] = frozenset(
 # match a run of digits inside an ISO timestamp or a UUID, so these are not redacted.
 _GENERATED_KEYS: frozenset[str] = frozenset({"timestamp", "request_id"})
 
-_EVENT_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
-_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_EVENT_NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+# Every part is length-bounded so the cost stays linear on attacker-controlled input.
+_EMAIL = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}")
 # Nine or more digits, optionally separated by spaces, dots, dashes or brackets.
 _PHONE = re.compile(r"(?<!\w)\+?\(?\d(?:[\s().-]{0,2}\d){8,}(?!\w)")
 _REDACTED = "[redacted]"
+
+# Longer strings are cut before redaction, which also bounds the regex cost.
+MAX_VALUE_LENGTH = 200
+_TRUNCATED = "[truncated]"
 
 # Loggers that uvicorn configures itself. They are re-routed to the root handler.
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.error")
@@ -59,7 +64,7 @@ def check_event_name(_: WrappedLogger, __: str, event_dict: EventDict) -> EventD
     This stops an f-string that contains user data from being used as the message.
     """
     event = event_dict.get("event")
-    if not isinstance(event, str) or not _EVENT_NAME.match(event):
+    if not isinstance(event, str) or not _EVENT_NAME.fullmatch(event):
         event_dict["event"] = "invalid_event_name"
     return event_dict
 
@@ -69,6 +74,21 @@ def drop_unlisted_keys(_: WrappedLogger, __: str, event_dict: EventDict) -> Even
     return {key: value for key, value in event_dict.items() if key in ALLOWED_KEYS}
 
 
+def limit_values(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
+    """Keep only scalar values, and cut long strings.
+
+    A list or dict under an allowed key would skip redaction, so it is dropped.
+    """
+    limited: EventDict = {}
+    for key, value in event_dict.items():
+        if value is not None and not isinstance(value, str | int | float | bool):
+            continue
+        if isinstance(value, str) and len(value) > MAX_VALUE_LENGTH:
+            value = value[:MAX_VALUE_LENGTH] + _TRUNCATED
+        limited[key] = value
+    return limited
+
+
 def redact_pii(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
     """Replace email addresses and phone-like digit runs in string values."""
     for key, value in event_dict.items():
@@ -76,6 +96,23 @@ def redact_pii(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
             value = _EMAIL.sub(_REDACTED, value)
             event_dict[key] = _PHONE.sub(_REDACTED, value)
     return event_dict
+
+
+# Keys structlog's ProcessorFormatter adds to a foreign record and removes itself later.
+_FORMATTER_META_KEYS = ("_record", "_from_structlog")
+
+
+def sanitize_foreign(logger: WrappedLogger, method_name: str, event_dict: EventDict) -> EventDict:
+    """Apply the allow-list, value limits and redaction to another library's record.
+
+    Its message is free text, but exc_info, stack_info and any other extra key are
+    dropped. The formatter's own meta keys are set aside and put back afterwards.
+    """
+    meta = {key: event_dict[key] for key in _FORMATTER_META_KEYS if key in event_dict}
+    cleaned = drop_unlisted_keys(logger, method_name, event_dict)
+    cleaned = limit_values(logger, method_name, cleaned)
+    cleaned = redact_pii(logger, method_name, cleaned)
+    return {**cleaned, **meta}
 
 
 def _shared_processors() -> list[Processor]:
@@ -101,6 +138,7 @@ def configure_logging(level: str, stream: TextIO | None = None) -> None:
             *_shared_processors(),
             check_event_name,
             drop_unlisted_keys,
+            limit_values,
             redact_pii,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
@@ -110,7 +148,11 @@ def configure_logging(level: str, stream: TextIO | None = None) -> None:
     )
 
     formatter = structlog.stdlib.ProcessorFormatter(
-        foreign_pre_chain=[*_shared_processors(), redact_pii],
+        foreign_pre_chain=[
+            structlog.contextvars.merge_contextvars,
+            *_shared_processors(),
+            sanitize_foreign,
+        ],
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             structlog.processors.JSONRenderer(),

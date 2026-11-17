@@ -4,36 +4,68 @@ It is not `BaseHTTPMiddleware`, which would buffer streaming responses such as t
 SSE stream added later.
 """
 
+import asyncio
+import re
 import time
 import uuid
+from functools import lru_cache
 
 import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
-from app.api.routers import API_V1_PREFIX
 
 logger = structlog.get_logger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
 UNMATCHED_ROUTE = "unmatched"
 
+# The method is client-supplied text, so anything else is logged as "other".
+KNOWN_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+OTHER_METHOD = "other"
+
+
+@lru_cache(maxsize=256)
+def _tail_search(pattern: str) -> re.Pattern[str]:
+    """A route's path regex without its leading `^`, so it can be searched for."""
+    return re.compile(pattern.removeprefix("^"))
+
 
 def _route_template(scope: Scope) -> str:
-    """Return the matched route's template, never the raw path or query string.
+    """Return the matched route's full template, never a raw path or a path value.
 
-    Starlette's router stores the matched route in `scope["route"]` once it matches.
-    FastAPI resolves routers added with `include_router` lazily, so for those routes
-    `path` lacks the `/api/v1` prefix of the parent router. The prefix is added back
-    here. Routes registered straight on the app (the docs routes) already carry it.
+    FastAPI resolves `include_router` lazily, so `scope["route"]` is the original
+    route and only knows its own tail (`/notes/{note_id}`), not the prefixes added by
+    the routers it was included in. The prefix is recovered from the request path:
+    everything before the place where the route's own regex matches. The tail always
+    comes from `path_format`, so no parameter value of the route itself is logged.
+
+    A prefix is literal text, so this is safe, unless a prefix contains a path
+    parameter (`prefix="/applications/{application_id}"`): its concrete value would be
+    in the recovered text. The scope's `path_params` then holds a name the route does
+    not own, and only the bare tail template is logged. fastapi-conventions forbids
+    path parameters in `prefix=`, and a test checks every route against the OpenAPI
+    template.
     """
     route = scope.get("route")
-    path = getattr(route, "path", None)
-    if not isinstance(path, str):
+    template = getattr(route, "path_format", None)
+    pattern = getattr(getattr(route, "path_regex", None), "pattern", None)
+    if not isinstance(template, str) or not isinstance(pattern, str):
         return UNMATCHED_ROUTE
-    if path.startswith(API_V1_PREFIX):
-        return path
-    return API_V1_PREFIX + path
+
+    own_params = set(getattr(route, "param_convertors", {}))
+    if set(scope.get("path_params", {})) - own_params:
+        return template
+
+    path = str(scope["path"])
+    match = _tail_search(pattern).search(path)
+    if match is None:
+        return template
+    return path[: match.start()] + template
+
+
+def _method(scope: Scope) -> str:
+    method = scope["method"]
+    return method if method in KNOWN_METHODS else OTHER_METHOD
 
 
 class RequestContextMiddleware:
@@ -64,10 +96,19 @@ class RequestContextMiddleware:
 
         try:
             await self.app(scope, receive, send_with_request_id)
+        except asyncio.CancelledError:
+            # A client that disconnects cancels the handler. Log it and let it propagate.
+            logger.info(
+                "request_cancelled",
+                method=_method(scope),
+                route=_route_template(scope),
+                duration_ms=_elapsed_ms(started),
+            )
+            raise
         except Exception as error:
             logger.error(
                 "request_failed",
-                method=scope["method"],
+                method=_method(scope),
                 route=_route_template(scope),
                 error_type=type(error).__name__,
                 duration_ms=_elapsed_ms(started),
@@ -76,7 +117,7 @@ class RequestContextMiddleware:
 
         logger.info(
             "request_completed",
-            method=scope["method"],
+            method=_method(scope),
             route=_route_template(scope),
             status_code=status_code,
             duration_ms=_elapsed_ms(started),

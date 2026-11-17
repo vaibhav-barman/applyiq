@@ -23,6 +23,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=DOCS_URL if docs_enabled else None,
         redoc_url=None,
         openapi_url=OPENAPI_URL if docs_enabled else None,
+        # Without this the docs add a route outside /api/v1.
+        swagger_ui_oauth2_redirect_url=None,
     )
     app.add_middleware(RequestContextMiddleware)
     app.include_router(api_v1_router)
