@@ -1,6 +1,6 @@
 # Spec 001: Backend scaffold
 
-Status: Implemented
+Status: Verified
 Tracker task: Phase 0, bullet 1: Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health`
 Branch: feat/001-backend-scaffold
 Depends on: none
@@ -141,6 +141,8 @@ No graph, grounding or cross-user tests apply: there are no graphs and no user d
 
 ## 8. Manual checks (owner)
 No browser checks. One optional terminal check: run `uv run uvicorn app.main:app --reload`, then `curl -i localhost:8000/api/v1/health`, and confirm the terminal shows a single-line JSON `request_completed` entry and no plain-text access line.
+
+Owner confirmation (2026-11-17): ran both commands. Got 200, `{"status":"ok"}`, an `x-request-id` header, and one JSON `request_completed` line carrying the same request id, with no plain-text access line. The only plain-text lines were the three reloader startup lines at the top. They come from uvicorn's `--reload` supervisor process before the app is imported, so they appear in development only.
 
 ## 9. Open questions
 None blocking. Three decisions made here, to be recorded in MEMORY.md by `/ship-feature` if approved:
