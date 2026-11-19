@@ -90,3 +90,11 @@ def test_redis_refuses_to_evict_keys() -> None:
 
 def test_postgres_does_not_use_the_old_data_path() -> None:
     assert "/var/lib/postgresql/data" not in COMPOSE
+
+
+def test_redis_password_is_not_a_process_argument() -> None:
+    # `--requirepass` on the command line would show the password in `ps` and `docker top`.
+    block = service_block("redis")
+    assert "--requirepass" not in block
+    assert "exec redis-server - " in block
+    assert "requirepass $$REDIS_PASSWORD" in block

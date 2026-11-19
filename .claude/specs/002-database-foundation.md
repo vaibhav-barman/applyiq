@@ -318,7 +318,7 @@ The second half of the original bullet, kept here so it is not lost.
 - **The `DATABASE_URL` check is a model validator** (`mode="after"`), not a field validator, because the prod password rule needs `app_env`.
 - **T3 and T4 share one commit**: T3 alone broke test collection, because `app.main` built the app at import.
 - **Alembic logging**: `env.py` treats a run as command-line when `config.cmd_opts` is set; tests run programmatically and leave logging alone. Offline `--sql` mode exits with a message.
-- **Compose limits** use `deploy.resources.limits`, confirmed with `docker compose config`. The Redis password reaches `redis-server` via `sh -c` so it is not baked into the command line in the file.
+- **Compose limits** use `deploy.resources.limits`, confirmed with `docker compose config`. The Redis password reaches `redis-server` as config on stdin (`redis-server -` with a here-doc), so it is in neither the file nor the process arguments (`docker top` shows only `redis-server *:6379`). It is still visible to `docker inspect` through the container environment.
 - **Test settings** come from `tests/settings_support.make_settings`, which adds a dummy, never-connected `DATABASE_URL`.
 - **AC11 amended** during /test-feature with the owner's approval: Postgres's own error messages can quote the offending value, so only the log and SQLAlchemy's parameter dump are guaranteed clean. Gotcha added to MEMORY.md.
 - **Local setup found during testing**: a Homebrew `postgresql@18` service held port 5432 (owner stopped it), and `.env` initially had different values in `POSTGRES_PASSWORD` and `DATABASE_URL`.
