@@ -1,6 +1,6 @@
 # Spec 002: Database foundation
 
-Status: Verified
+Status: Done
 Tracker task: Phase 0, bullet 2 (first half): Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
 Branch: feat/002-database-foundation
 Depends on: 001 (merged)
@@ -322,3 +322,22 @@ The second half of the original bullet, kept here so it is not lost.
 - **Test settings** come from `tests/settings_support.make_settings`, which adds a dummy, never-connected `DATABASE_URL`.
 - **AC11 amended** during /test-feature with the owner's approval: Postgres's own error messages can quote the offending value, so only the log and SQLAlchemy's parameter dump are guaranteed clean. Gotcha added to MEMORY.md.
 - **Local setup found during testing**: a Homebrew `postgresql@18` service held port 5432 (owner stopped it), and `.env` initially had different values in `POSTGRES_PASSWORD` and `DATABASE_URL`.
+
+### Review outcome (/code-review-feature, 2026-11-20)
+A code reviewer and a security reviewer found no Blockers, one Major and nine Minors. The owner chose to fix all ten. Items 7 and 8 go beyond this spec's original scope and were added with the owner's approval.
+1. Major: `updated_at` was expired after an UPDATE, so reading it under async raised `MissingGreenlet`. `TimestampMixin` now sets `eager_defaults=True`. The update test no longer calls `refresh()`, so it catches this.
+2. The Redis password was visible in the process arguments. It is now passed to `redis-server -` on stdin (D38 context in MEMORY.md).
+3. `psycopg` and `sqlalchemy` log messages could carry Postgres error text. They are now replaced with `db_driver_message` (D40).
+4. The SQLAlchemy logger-hold test passed even without the hold, because SQLAlchemy defaults its parent to WARNING. It now raises the parent to INFO first; checked by removing the hold (2 failed).
+5. Test fixtures now refuse a database server other than localhost.
+6. Docs: `.env.example` says which values must match; the out-of-date MEMORY.md "SecretStr pending" note was fixed; SECURITY.md section 9 now has the D32 licence wording.
+7. Least-privilege role: the app, Alembic and the tests connect as `applyiq_app` (NOSUPERUSER, NOCREATEROLE), created by `docker/postgres/initdb/01-app-role.sh`. This needs `APP_DB_USER` and `APP_DB_PASSWORD`. The script was first checked in a throwaway container: `COPY ... PROGRAM` is refused and test databases can be created and dropped (D38).
+8. Prod `DATABASE_URL`: placeholders are matched in any case, the password needs at least 16 characters, and `sslmode` must be `require`, `verify-ca` or `verify-full` (D39).
+9. The pool test no longer reads private SQLAlchemy attributes; it spies on the arguments given to `create_async_engine`.
+10. New Alembic revisions are cleaned by ruff through `post_write_hooks`, so unused `sa` and `op` imports are removed.
+
+One commit (`9b2e06d`) went in with a failing test, because piping pytest into `tail` hid its exit code. The next commit (`3af8fae`) fixed the test, and later commits gate on pytest's real exit code.
+
+Not fixed, and left for the first deploy bullet: pin container images by digest in the production compose file, and reject `LOG_LEVEL=DEBUG` in prod (already deferred in MEMORY.md).
+
+Final checks: `uv lock --check`, ruff, ruff format, `mypy app mcp_servers` all clean; `uv run pytest -q --require-services` 321 passed. `alembic upgrade head`, `current` and `check` pass as `applyiq_app` on the recreated dev volume.
