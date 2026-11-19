@@ -247,6 +247,112 @@ def test_pool_settings_out_of_range_are_rejected(field: str, value: int) -> None
         make_settings(**{field: value})
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"postgresql+psycopg2://u:{SENTINEL}@db:5432/app",
+        f"sqlite+aiosqlite:///{SENTINEL}.db",
+        f"mysql+pymysql://u:{SENTINEL}@db:3306/app",
+        f"postgres://u:{SENTINEL}@db:5432/app",
+        f"postgresql+psycopg://u:{SENTINEL}@db:5432/",
+        SENTINEL,
+        "",
+    ],
+)
+def test_other_unusable_urls_are_rejected_without_echoing_them(url: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(database_url=url)
+    text = str(caught.value)
+    assert "DATABASE_URL" in text
+    assert SENTINEL not in text
+    assert "db:5432" not in text
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"postgresql://u:{SENTINEL}@db.internal:5432/app",
+        f"postgresql+asyncpg://u:{SENTINEL}@db.internal:5432/app",
+        f"postgresql+psycopg://u:{SENTINEL}@/app",
+    ],
+)
+def test_error_text_contains_neither_the_password_nor_the_host(url: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(database_url=url)
+    text = str(caught.value)
+    assert SENTINEL not in text
+    assert "db.internal" not in text
+    assert url not in text
+
+
+def test_required_url_error_names_the_variable() -> None:
+    with pytest.raises(ValidationError) as caught:
+        Settings(_env_file=None, database_url=None)  # type: ignore[arg-type]
+    assert "database_url" in str(caught.value).lower()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+psycopg://u:@db.internal:5432/app",
+        "postgresql+psycopg://db.internal:5432/app",
+        f"postgresql+psycopg://u:REPLACE_WITH_{SENTINEL}@db.internal:5432/app",
+    ],
+)
+def test_prod_password_errors_do_not_echo_the_url(url: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(app_env="prod", database_url=url)
+    text = str(caught.value)
+    assert "db.internal" not in text
+    assert SENTINEL not in text
+    assert "DATABASE_URL" in text
+
+
+@pytest.mark.parametrize("app_env", ["dev", "test"])
+def test_non_prod_environments_accept_a_missing_password(app_env: str) -> None:
+    make_settings(app_env=app_env, database_url="postgresql+psycopg://u@127.0.0.1:5432/app")
+
+
+def test_prod_only_rejects_the_documented_placeholders() -> None:
+    """Only `change-me` exactly and the `REPLACE_WITH` prefix are placeholders."""
+    make_settings(app_env="prod", database_url="postgresql+psycopg://u:change-me-not@db:5432/app")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("db_pool_size", 1),
+        ("db_pool_size", 20),
+        ("db_max_overflow", 0),
+        ("db_max_overflow", 20),
+        ("db_pool_timeout_seconds", 1),
+        ("db_pool_timeout_seconds", 60),
+        ("db_pool_recycle_seconds", 60),
+        ("db_pool_recycle_seconds", 7200),
+    ],
+)
+def test_pool_settings_at_their_limits_are_accepted(field: str, value: int) -> None:
+    assert getattr(make_settings(**{field: value}), field) == value
+
+
+@pytest.mark.parametrize("variable", POOL_VARIABLES)
+def test_pool_settings_are_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    monkeypatch.setenv(variable, "7" if variable != "DB_POOL_RECYCLE_SECONDS" else "100")
+    settings = Settings(_env_file=None)
+    expected = 100 if variable == "DB_POOL_RECYCLE_SECONDS" else 7
+    assert getattr(settings, variable.lower()) == expected
+
+
+def test_pool_setting_out_of_range_in_the_environment_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DB_POOL_SIZE", "21")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
 def test_env_example_has_no_password_values() -> None:
     lines = (REPO_ROOT / ".env.example").read_text().splitlines()
     assert "POSTGRES_PASSWORD=" in lines
@@ -258,3 +364,31 @@ def test_env_example_database_settings_are_read(monkeypatch: pytest.MonkeyPatch)
     settings = Settings(_env_file=REPO_ROOT / ".env.example")
     assert "REPLACE_WITH_POSTGRES_PASSWORD" in settings.database_url.get_secret_value()
     assert settings.db_pool_recycle_seconds == 1800
+
+
+def test_env_example_pool_values_match_the_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL")
+    settings = Settings(_env_file=REPO_ROOT / ".env.example")
+    defaults = make_settings()
+    for field in ("db_pool_size", "db_max_overflow", "db_pool_timeout_seconds"):
+        assert getattr(settings, field) == getattr(defaults, field)
+
+
+def test_env_example_lists_every_database_variable() -> None:
+    names = {
+        line.split("=", 1)[0]
+        for line in (REPO_ROOT / ".env.example").read_text().splitlines()
+        if "=" in line and not line.startswith("#")
+    }
+    required = {
+        "POSTGRES_USER",
+        "POSTGRES_DB",
+        "POSTGRES_PORT",
+        "POSTGRES_PASSWORD",
+        "DATABASE_URL",
+        "REDIS_PORT",
+        "REDIS_PASSWORD",
+        "REDIS_URL",
+        *POOL_VARIABLES,
+    }
+    assert required <= names

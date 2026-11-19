@@ -47,7 +47,8 @@ def test_unreachable_postgres_skips_db_tests_with_the_start_hint(
     monkeypatch.setenv("DATABASE_URL", UNREACHABLE_URL)
     result = sample_project.runpytest("-rs")
     result.assert_outcomes(passed=1, skipped=1)
-    result.stdout.fnmatch_lines(["*docker compose up -d postgres*"])
+    assert result.ret == 0
+    result.stdout.fnmatch_lines(["SKIPPED*docker compose up -d postgres*"])
     assert "unused" not in result.stdout.str()
 
 
@@ -57,7 +58,9 @@ def test_require_services_turns_the_skip_into_a_failure(
     monkeypatch.setenv("DATABASE_URL", UNREACHABLE_URL)
     result = sample_project.runpytest("--require-services")
     result.assert_outcomes(passed=1, errors=1)
+    assert result.ret != 0
     result.stdout.fnmatch_lines(["*docker compose up -d postgres*"])
+    assert "unused" not in result.stdout.str()
 
 
 def test_without_database_url_other_tests_still_collect_and_pass(
@@ -74,13 +77,36 @@ def test_derived_url_adds_the_test_suffix() -> None:
     assert derived_url(make_url(UNREACHABLE_URL)).database == "applyiq_test"
 
 
-@pytest.mark.parametrize("name", ["applyiq", "applyiq_testing", "test_applyiq", "postgres"])
+@pytest.mark.parametrize(
+    "name", ["applyiq", "applyiq_testing", "test_applyiq", "postgres", "applyiq_TEST", "", None]
+)
 def test_a_database_not_named_test_is_refused(name: str) -> None:
     url = make_url(UNREACHABLE_URL).set(database=name)
     with pytest.raises(RuntimeError, match="not named"):
         require_test_database(url)
     with pytest.raises(RuntimeError, match="not named"):
         make_test_engine(url)
+
+
+@pytest.mark.parametrize("name", ["applyiq_test", "applyiq_migrations_test"])
+def test_a_database_named_test_is_accepted(name: str) -> None:
+    url = make_url(UNREACHABLE_URL).set(database=name)
+    require_test_database(url)
+    assert make_test_engine(url) is not None
+
+
+def test_the_test_database_never_equals_the_configured_one() -> None:
+    base = make_url(UNREACHABLE_URL)
+    assert derived_url(base).database != base.database
+    assert derived_url(base, "_migrations_test").database == "applyiq_migrations_test"
+
+
+@pytest.mark.parametrize("name", ["applyiq", "postgres", "template1"])
+async def test_ensure_database_refuses_real_database_names_even_when_recreating(
+    name: str,
+) -> None:
+    with pytest.raises(RuntimeError, match="not named"):
+        await ensure_database(make_url(UNREACHABLE_URL).set(database=name), recreate=True)
 
 
 async def test_ensure_database_refuses_before_connecting() -> None:

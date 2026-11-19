@@ -64,3 +64,29 @@ def test_passwords_are_required(variable: str) -> None:
 def test_no_literal_password_in_the_file() -> None:
     for match in re.finditer(r"(?:PASSWORD|REDISCLI_AUTH): (.+)", COMPOSE):
         assert match.group(1).startswith("${")
+
+
+@pytest.mark.parametrize("volume", ["postgres_data", "redis_data"])
+def test_named_volumes_are_declared_at_the_top_level(volume: str) -> None:
+    top_level = COMPOSE.split("\nvolumes:\n")[-1]
+    assert re.search(rf"^  {volume}:", top_level, re.MULTILINE)
+
+
+@pytest.mark.parametrize("service", ["postgres", "redis"])
+def test_healthcheck_has_a_test_command_and_retries(service: str) -> None:
+    block = service_block(service).split("healthcheck:")[1]
+    assert "test:" in block
+    assert "retries:" in block
+
+
+@pytest.mark.parametrize("service", ["postgres", "redis"])
+def test_service_restarts_unless_stopped(service: str) -> None:
+    assert "restart: unless-stopped" in service_block(service)
+
+
+def test_redis_refuses_to_evict_keys() -> None:
+    assert "noeviction" in service_block("redis")
+
+
+def test_postgres_does_not_use_the_old_data_path() -> None:
+    assert "/var/lib/postgresql/data" not in COMPOSE

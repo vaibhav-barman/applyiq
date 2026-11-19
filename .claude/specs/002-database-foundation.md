@@ -1,6 +1,6 @@
 # Spec 002: Database foundation
 
-Status: Implemented
+Status: Verified
 Tracker task: Phase 0, bullet 2 (first half): Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
 Branch: feat/002-database-foundation
 Depends on: 001 (merged)
@@ -175,21 +175,21 @@ Container images: `pgvector/pgvector:0.8.7-pg18-trixie` (PostgreSQL 18.x; Postgr
 - **Licences.** Checked, see the table and D32.
 
 ## 5. Acceptance criteria
-- [ ] AC1: `docker compose config` succeeds with both passwords set, and fails with the "Set POSTGRES_PASSWORD in .env" message when it is unset. Both images are pinned to a full version tag, both published ports start with `127.0.0.1:`, both services have a healthcheck, a named volume and a memory limit, and the Postgres volume mounts at `/var/lib/postgresql`.
-- [ ] AC2: `Settings` requires `DATABASE_URL`. It rejects a URL that is unparseable, uses another driver (`postgresql://`, `postgresql+asyncpg://`), or lacks a host or database name. With `APP_ENV=prod` it rejects a missing, `change-me` or `REPLACE_WITH...` password. The text of every such error does not contain the password or the URL. Pool settings outside their ranges are rejected.
-- [ ] AC3: `Settings` loads from an env file holding everything in `.env.example`. `.env.example` has no value for `POSTGRES_PASSWORD` or `REDIS_PASSWORD`.
-- [ ] AC4: A table built on `Base` with both mixins gets constraint names from the convention (`pk_<table>`, `uq_<table>_<column>`, `fk_...`, `ix_...`, `ck_...`).
-- [ ] AC5: A row inserted through a session gets a UUID `id`, and timezone-aware `created_at` and `updated_at` with a zero UTC offset. Updating the row moves `updated_at` forward and leaves `created_at` unchanged.
-- [ ] AC6: A route using `SessionDep` that returns normally has its change committed. A route that raises has its change rolled back and returns 500.
-- [ ] AC7: A route whose commit fails (unique violation raised at commit) returns 500, not the handler's 200, and no row is stored.
-- [ ] AC8: The app starts and serves `GET /api/v1/health` with Postgres unreachable. After the lifespan ends, the engine is disposed.
-- [ ] AC9: On an empty database, `alembic upgrade head` succeeds and leaves `alembic_version` as the only table in `public`. `alembic check` then reports no changes. `alembic downgrade base` succeeds and leaves `alembic_version` empty.
-- [ ] AC10: With the four checkpoint tables present in `public` and also in a `langgraph` schema, `alembic check` still reports no changes, autogenerate produces no operations, and the tables still exist after `upgrade head` and `downgrade base`.
-- [ ] AC11: With `LOG_LEVEL=DEBUG`, a statement that fails with a sentinel parameter value puts the sentinel nowhere in the captured log, and no SQL text appears in the log. The exception's SQLAlchemy parameter dump says the parameters are hidden. (Amended during /test-feature, owner approved: Postgres's own error message can quote the offending value, so the exception text itself is not guaranteed clean. The Phase 1 problem+json handler must never return or log exception messages.)
-- [ ] AC12: With Postgres unreachable, `uv run pytest -q` passes, every `db` test is reported as skipped with a reason that includes `docker compose up -d postgres`, and none is reported as passed. With `--require-services`, the same run fails. With no `DATABASE_URL` in the environment and no `.env`, the non-`db` tests are still collected and pass.
-- [ ] AC13: The database fixtures refuse a database name that does not end in `_test`.
-- [ ] AC14: `uv lock --check`, `ruff check`, `ruff format --check`, `mypy app mcp_servers` and `pytest` all exit 0. The three new packages are pinned with `==`. No `os.getenv` or `os.environ` under `app/`.
-- [ ] AC15: Importing `app.main` with a valid environment gives a FastAPI `app`. `tests/conftest.py` does not import `app.main`.
+- [x] AC1: `docker compose config` succeeds with both passwords set, and fails with the "Set POSTGRES_PASSWORD in .env" message when it is unset. Both images are pinned to a full version tag, both published ports start with `127.0.0.1:`, both services have a healthcheck, a named volume and a memory limit, and the Postgres volume mounts at `/var/lib/postgresql`.
+- [x] AC2: `Settings` requires `DATABASE_URL`. It rejects a URL that is unparseable, uses another driver (`postgresql://`, `postgresql+asyncpg://`), or lacks a host or database name. With `APP_ENV=prod` it rejects a missing, `change-me` or `REPLACE_WITH...` password. The text of every such error does not contain the password or the URL. Pool settings outside their ranges are rejected.
+- [x] AC3: `Settings` loads from an env file holding everything in `.env.example`. `.env.example` has no value for `POSTGRES_PASSWORD` or `REDIS_PASSWORD`.
+- [x] AC4: A table built on `Base` with both mixins gets constraint names from the convention (`pk_<table>`, `uq_<table>_<column>`, `fk_...`, `ix_...`, `ck_...`).
+- [x] AC5: A row inserted through a session gets a UUID `id`, and timezone-aware `created_at` and `updated_at` with a zero UTC offset. Updating the row moves `updated_at` forward and leaves `created_at` unchanged.
+- [x] AC6: A route using `SessionDep` that returns normally has its change committed. A route that raises has its change rolled back and returns 500.
+- [x] AC7: A route whose commit fails (unique violation raised at commit) returns 500, not the handler's 200, and no row is stored.
+- [x] AC8: The app starts and serves `GET /api/v1/health` with Postgres unreachable. After the lifespan ends, the engine is disposed.
+- [x] AC9: On an empty database, `alembic upgrade head` succeeds and leaves `alembic_version` as the only table in `public`. `alembic check` then reports no changes. `alembic downgrade base` succeeds and leaves `alembic_version` empty.
+- [x] AC10: With the four checkpoint tables present in `public` and also in a `langgraph` schema, `alembic check` still reports no changes, autogenerate produces no operations, and the tables still exist after `upgrade head` and `downgrade base`.
+- [x] AC11: With `LOG_LEVEL=DEBUG`, a statement that fails with a sentinel parameter value puts the sentinel nowhere in the captured log, and no SQL text appears in the log. The exception's SQLAlchemy parameter dump says the parameters are hidden. (Amended during /test-feature, owner approved: Postgres's own error message can quote the offending value, so the exception text itself is not guaranteed clean. The Phase 1 problem+json handler must never return or log exception messages.)
+- [x] AC12: With Postgres unreachable, `uv run pytest -q` passes, every `db` test is reported as skipped with a reason that includes `docker compose up -d postgres`, and none is reported as passed. With `--require-services`, the same run fails. With no `DATABASE_URL` in the environment and no `.env`, the non-`db` tests are still collected and pass.
+- [x] AC13: The database fixtures refuse a database name that does not end in `_test`.
+- [x] AC14: `uv lock --check`, `ruff check`, `ruff format --check`, `mypy app mcp_servers` and `pytest` all exit 0. The three new packages are pinned with `==`. No `os.getenv` or `os.environ` under `app/`.
+- [x] AC15: Importing `app.main` with a valid environment gives a FastAPI `app`. `tests/conftest.py` does not import `app.main`.
 
 ## 6. Implementation tasks
 Each task is one commit or a few. Run `git branch --show-current` before every commit.
@@ -282,6 +282,15 @@ No browser checks. Terminal checks on the Mac, from the repo root. Step 1 is nee
 8. Data survives a restart: `docker compose down`, `docker compose up -d`, `uv run alembic current` still shows the baseline.
 
 Readiness behaviour is checked in spec 003, where the route is built.
+
+**Owner confirmations (2026-11-20, during /test-feature):**
+- Steps 1–2: `.env` created; both containers healthy (after stopping a Homebrew `postgresql@18` on 5432 and aligning the `DATABASE_URL` password).
+- Step 3: `docker compose port` printed `127.0.0.1:5432` and `127.0.0.1:6379`.
+- Step 4: `alembic upgrade head` gave `a82a4236b5b9 (head)`; `\dt` listed only `alembic_version`; Alembic's lines were JSON.
+- Step 5: downgrade left no revision; upgrade restored the baseline.
+- Step 6: `vector` available with an empty `installed_version`.
+- Step 7: with Postgres stopped, 17 `db` tests skipped with the `docker compose up -d postgres` reason; `--require-services` gave 17 errors.
+- Step 8: after `docker compose down` and `up -d`, `alembic current` still showed the baseline.
 
 ## 9. Open questions
 None blocking. Decisions made here, recorded in MEMORY.md by T10:
