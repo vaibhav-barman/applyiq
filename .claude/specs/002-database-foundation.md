@@ -202,7 +202,7 @@ Each task is one commit or a few. Run `git branch --show-current` before every c
 - [x] T7: `tests/db_support.py` and the fixtures in `tests/conftest.py`: `--require-services`, the test database URL, create-if-missing, skip or fail, `db_session` with rollback, the lifespan in the `client` fixture. (AC12, AC13)
 - [ ] T8: `tests/integration/test_db_session.py`. (AC5, AC6, AC7, AC11)
 - [ ] T9: `alembic.ini`, `app/db/autogenerate.py`, `env.py`, `script.py.mako`, the baseline revision; `tests/unit/test_autogenerate_filter.py` and `tests/integration/test_migrations.py`. (AC9, AC10)
-- [ ] T10: Docs. `docs/tooling.md`: section 3 versions, section 4 commands (compose up, ps, down; `alembic downgrade base`, `alembic check`; `pytest --require-services`), section 5 note on the two passwords, section 6 note that CI sets `DATABASE_URL` and passes `--require-services`. `MEMORY.md`: D32 to D37, replace the `APP_ENV` collection gotcha, add the gotchas in section 9. `RULES.md` Dependencies: one sentence from D32. fastapi-conventions skill: `SessionDep`, the scope rule, background runs use the factory. Run all checks. (AC14)
+- [x] T10: Docs. `docs/tooling.md`: section 3 versions, section 4 commands (compose up, ps, down; `alembic downgrade base`, `alembic check`; `pytest --require-services`), section 5 note on the two passwords, section 6 note that CI sets `DATABASE_URL` and passes `--require-services`. `MEMORY.md`: D32 to D37, replace the `APP_ENV` collection gotcha, add the gotchas in section 9. `RULES.md` Dependencies: one sentence from D32. fastapi-conventions skill: `SessionDep`, the scope rule, background runs use the factory. Run all checks. (AC14)
 
 ## 7. Test plan
 Tests marked `db` need Postgres. Everything else runs with Docker off.

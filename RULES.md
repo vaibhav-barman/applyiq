@@ -56,7 +56,7 @@
 ## Dependencies
 - Ask before adding a new dependency. Prefer the standard library and what is already in the stack.
 - Pin exact versions (`==`) in `pyproject.toml` and commit `uv.lock`.
-- No AGPL or GPL dependencies. Check the licence before proposing a package (for example use pypdf, not PyMuPDF).
+- No AGPL or GPL dependencies. Check the licence before proposing a package (for example use pypdf, not PyMuPDF). The rule covers code we link or ship: an LGPL library used unmodified (psycopg) is allowed, and an unmodified service container (Redis) is not a dependency (MEMORY.md D32).
 - Never add TypeScript, Tailwind, Redux, a drag-and-drop library, or a UI kit. Frontend deps beyond React, React Router, TanStack Query, and @fontsource need approval.
 
 ## Things to never do
