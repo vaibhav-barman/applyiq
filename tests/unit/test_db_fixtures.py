@@ -114,8 +114,8 @@ async def test_ensure_database_refuses_before_connecting() -> None:
         await ensure_database(make_url(UNREACHABLE_URL), recreate=True)
 
 
-@pytest.mark.parametrize("host", ["db.example.com", "10.0.0.5", "postgres", None])
-def test_a_server_not_on_localhost_is_refused(host: str | None) -> None:
+@pytest.mark.parametrize("host", ["db.example.com", "10.0.0.5", "postgres", ""])
+def test_a_server_not_on_localhost_is_refused(host: str) -> None:
     url = make_url(UNREACHABLE_URL).set(host=host, database="applyiq_test")
     with pytest.raises(RuntimeError, match="not on localhost"):
         require_test_database(url)
