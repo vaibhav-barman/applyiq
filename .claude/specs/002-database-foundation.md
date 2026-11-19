@@ -198,7 +198,7 @@ Each task is one commit or a few. Run `git branch --show-current` before every c
 - [x] T3: Settings fields and the `DATABASE_URL` validator; extend `tests/unit/test_config.py`. Every existing `Settings(_env_file=None, ...)` call in the tests now passes a dummy `database_url`; put it in one helper. (AC2, AC3)
 - [x] T4: Move `create_app` to `app/factory.py`, reduce `app/main.py` to the instance, point tests at `app.factory`, add `tests/integration/test_app_import.py`. No behaviour change; the suite stays green. (AC15)
 - [x] T5: `app/db/base.py` and `tests/unit/test_db_base.py` (compile `CreateTable` for a test-only table against the PostgreSQL dialect; no database needed). (AC4)
-- [ ] T6: `app/db/session.py`, the lifespan in `app/factory.py`, the two SQLAlchemy loggers in `app/core/logging.py`. Confirm `hide_parameters`, `join_transaction_mode` and `Depends(scope=...)` in the current docs before using them. (AC8)
+- [x] T6: `app/db/session.py`, the lifespan in `app/factory.py`, the two SQLAlchemy loggers in `app/core/logging.py`. Confirm `hide_parameters`, `join_transaction_mode` and `Depends(scope=...)` in the current docs before using them. (AC8)
 - [ ] T7: `tests/db_support.py` and the fixtures in `tests/conftest.py`: `--require-services`, the test database URL, create-if-missing, skip or fail, `db_session` with rollback, the lifespan in the `client` fixture. (AC12, AC13)
 - [ ] T8: `tests/integration/test_db_session.py`. (AC5, AC6, AC7, AC11)
 - [ ] T9: `alembic.ini`, `app/db/autogenerate.py`, `env.py`, `script.py.mako`, the baseline revision; `tests/unit/test_autogenerate_filter.py` and `tests/integration/test_migrations.py`. (AC9, AC10)

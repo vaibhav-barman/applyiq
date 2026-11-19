@@ -1,6 +1,6 @@
 """Structured JSON logging with an allow-list of keys (SECURITY.md section 6).
 
-Our own loggers use structlog. Records from other libraries (uvicorn, later
+Our own loggers use structlog. Records from other libraries (uvicorn,
 SQLAlchemy) reach the same JSON handler through the standard library.
 
 To log a new field, add its name to ALLOWED_KEYS. That one frozenset is where a
@@ -53,7 +53,8 @@ _UVICORN_ACCESS = "uvicorn.access"
 
 # HTTP client libraries log every request URL, query string included, at INFO. A URL
 # can carry an API key or a search term, so they only log from WARNING up.
-_QUIET_LOGGERS = ("httpx", "httpcore")
+# SQLAlchemy's engine and pool loggers print SQL text and parameter values at INFO.
+_QUIET_LOGGERS = ("httpx", "httpcore", "sqlalchemy.engine", "sqlalchemy.pool")
 
 _installed_handler: logging.Handler | None = None
 
