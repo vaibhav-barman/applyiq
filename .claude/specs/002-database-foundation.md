@@ -194,7 +194,7 @@ Container images: `pgvector/pgvector:0.8.7-pg18-trixie` (PostgreSQL 18.x; Postgr
 ## 6. Implementation tasks
 Each task is one commit or a few. Run `git branch --show-current` before every commit.
 - [x] T1: Add the three dependencies to `pyproject.toml`, run `uv lock` and `uv sync`. Add the `db` marker and `testpaths = ["tests"]` to the pytest config (the second makes `tests/conftest.py` an initial conftest, which `pytest_addoption` needs; verify against the pytest docs).
-- [ ] T2: `docker-compose.yml` and the `.env.example` block. Verify with `docker compose config`. (AC1, AC3)
+- [x] T2: `docker-compose.yml` and the `.env.example` block. Verify with `docker compose config`. (AC1, AC3)
 - [ ] T3: Settings fields and the `DATABASE_URL` validator; extend `tests/unit/test_config.py`. Every existing `Settings(_env_file=None, ...)` call in the tests now passes a dummy `database_url`; put it in one helper. (AC2, AC3)
 - [ ] T4: Move `create_app` to `app/factory.py`, reduce `app/main.py` to the instance, point tests at `app.factory`, add `tests/integration/test_app_import.py`. No behaviour change; the suite stays green. (AC15)
 - [ ] T5: `app/db/base.py` and `tests/unit/test_db_base.py` (compile `CreateTable` for a test-only table against the PostgreSQL dialect; no database needed). (AC4)
