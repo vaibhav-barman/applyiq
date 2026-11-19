@@ -326,7 +326,7 @@ The second half of the original bullet, kept here so it is not lost.
 ### Review outcome (/code-review-feature, 2026-11-20)
 A code reviewer and a security reviewer found no Blockers, one Major and nine Minors. The owner chose to fix all ten. Items 7 and 8 go beyond this spec's original scope and were added with the owner's approval.
 1. Major: `updated_at` was expired after an UPDATE, so reading it under async raised `MissingGreenlet`. `TimestampMixin` now sets `eager_defaults=True`. The update test no longer calls `refresh()`, so it catches this.
-2. The Redis password was visible in the process arguments. It is now passed to `redis-server -` on stdin (D38 context in MEMORY.md).
+2. The Redis password was visible in the process arguments. It is now passed to `redis-server -` on stdin.
 3. `psycopg` and `sqlalchemy` log messages could carry Postgres error text. They are now replaced with `db_driver_message` (D40).
 4. The SQLAlchemy logger-hold test passed even without the hold, because SQLAlchemy defaults its parent to WARNING. It now raises the parent to INFO first; checked by removing the hold (2 failed).
 5. Test fixtures now refuse a database server other than localhost.
