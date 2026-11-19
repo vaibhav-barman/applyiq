@@ -112,3 +112,21 @@ async def test_ensure_database_refuses_real_database_names_even_when_recreating(
 async def test_ensure_database_refuses_before_connecting() -> None:
     with pytest.raises(RuntimeError, match="not named"):
         await ensure_database(make_url(UNREACHABLE_URL), recreate=True)
+
+
+@pytest.mark.parametrize("host", ["db.example.com", "10.0.0.5", "postgres", None])
+def test_a_server_not_on_localhost_is_refused(host: str | None) -> None:
+    url = make_url(UNREACHABLE_URL).set(host=host, database="applyiq_test")
+    with pytest.raises(RuntimeError, match="not on localhost"):
+        require_test_database(url)
+
+
+async def test_ensure_database_refuses_a_remote_server_before_connecting() -> None:
+    url = make_url(UNREACHABLE_URL).set(host="db.example.com", database="applyiq_test")
+    with pytest.raises(RuntimeError, match="not on localhost"):
+        await ensure_database(url, recreate=True)
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1"])
+def test_local_servers_are_accepted(host: str) -> None:
+    require_test_database(make_url(UNREACHABLE_URL).set(host=host, database="applyiq_test"))

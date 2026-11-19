@@ -14,6 +14,9 @@ from app.core.config import Settings
 
 START_HINT = "start it with: docker compose up -d postgres"
 TEST_SUFFIX = "_test"
+# Tests create and drop databases, so they only ever touch a server on this machine.
+# GitHub Actions service containers are reached on localhost too.
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _CONNECT_TIMEOUT_SECONDS = 3
 
 
@@ -38,9 +41,14 @@ def derived_url(base: URL, suffix: str = TEST_SUFFIX) -> URL:
 
 
 def require_test_database(url: URL) -> None:
-    """Refuse any database whose name does not end in `_test` (it could hold real data)."""
+    """Refuse a database not named `*_test`, or on a server not on this machine.
+
+    Either could hold real data, and the fixtures create and drop databases.
+    """
     if not (url.database or "").endswith(TEST_SUFFIX):
         raise RuntimeError("refusing to run tests against a database not named *_test")
+    if url.host not in LOCAL_HOSTS:
+        raise RuntimeError("refusing to run tests against a database server not on localhost")
 
 
 def make_test_engine(url: URL) -> AsyncEngine:
