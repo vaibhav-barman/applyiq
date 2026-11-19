@@ -87,6 +87,7 @@ A design review before any code was written. Each decision has its reason, so a 
 - The Postgres password is in two places in `.env`: `POSTGRES_PASSWORD` (compose) and `DATABASE_URL` (app). Change both together.
 - `docker compose down -v` deletes the database and Redis volumes. Plain `down` keeps them.
 - `Settings` sets `hide_input_in_errors=True`: pydantic otherwise prints the raw input (the database URL with its password) in a `ValidationError`.
+- Postgres error messages can quote user input (`invalid input syntax for type integer: "..."`, `Key (code)=(...) already exists`). `hide_parameters=True` only hides SQLAlchemy's own parameter dump. Never log or return a database exception's message; the Phase 1 problem+json handler must use fixed text.
 - Claude Code permission rules and hooks are read at startup. Restart the session after editing `.claude/settings.json`.
 - A force-rename in the owner's terminal (`git branch -M`) can move `main` under a running session: during spec 001 the feature branch was renamed to `main`, and two commits landed on it before anyone noticed. Run `git branch --show-current` before every commit. The `no-commit-to-branch` hook (CI and pre-commit bullet) will add a second guard.
 

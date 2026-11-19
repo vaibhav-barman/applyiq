@@ -199,7 +199,9 @@ async def test_failed_statement_leaks_no_parameter_or_sql(
                 )
     finally:
         await engine.dispose()
-    assert SENTINEL not in str(caught.value)
+    # Postgres's own message may quote the bad value, so only SQLAlchemy's dump is checked
+    # here; exception text must never reach a log line or a response (AC11, amended).
+    assert "[SQL parameters hidden due to hide_parameters=True]" in str(caught.value)
     logged = log_stream.getvalue()
     assert SENTINEL not in logged
     assert "SELECT" not in logged

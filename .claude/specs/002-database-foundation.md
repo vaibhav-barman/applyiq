@@ -1,6 +1,6 @@
 # Spec 002: Database foundation
 
-Status: In progress
+Status: Implemented
 Tracker task: Phase 0, bullet 2 (first half): Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
 Branch: feat/002-database-foundation
 Depends on: 001 (merged)
@@ -185,7 +185,7 @@ Container images: `pgvector/pgvector:0.8.7-pg18-trixie` (PostgreSQL 18.x; Postgr
 - [ ] AC8: The app starts and serves `GET /api/v1/health` with Postgres unreachable. After the lifespan ends, the engine is disposed.
 - [ ] AC9: On an empty database, `alembic upgrade head` succeeds and leaves `alembic_version` as the only table in `public`. `alembic check` then reports no changes. `alembic downgrade base` succeeds and leaves `alembic_version` empty.
 - [ ] AC10: With the four checkpoint tables present in `public` and also in a `langgraph` schema, `alembic check` still reports no changes, autogenerate produces no operations, and the tables still exist after `upgrade head` and `downgrade base`.
-- [ ] AC11: With `LOG_LEVEL=DEBUG`, a statement that fails with a sentinel parameter value puts the sentinel in neither the captured log nor the exception text. No SQL text appears in the log.
+- [ ] AC11: With `LOG_LEVEL=DEBUG`, a statement that fails with a sentinel parameter value puts the sentinel nowhere in the captured log, and no SQL text appears in the log. The exception's SQLAlchemy parameter dump says the parameters are hidden. (Amended during /test-feature, owner approved: Postgres's own error message can quote the offending value, so the exception text itself is not guaranteed clean. The Phase 1 problem+json handler must never return or log exception messages.)
 - [ ] AC12: With Postgres unreachable, `uv run pytest -q` passes, every `db` test is reported as skipped with a reason that includes `docker compose up -d postgres`, and none is reported as passed. With `--require-services`, the same run fails. With no `DATABASE_URL` in the environment and no `.env`, the non-`db` tests are still collected and pass.
 - [ ] AC13: The database fixtures refuse a database name that does not end in `_test`.
 - [ ] AC14: `uv lock --check`, `ruff check`, `ruff format --check`, `mypy app mcp_servers` and `pytest` all exit 0. The three new packages are pinned with `==`. No `os.getenv` or `os.environ` under `app/`.
@@ -200,8 +200,8 @@ Each task is one commit or a few. Run `git branch --show-current` before every c
 - [x] T5: `app/db/base.py` and `tests/unit/test_db_base.py` (compile `CreateTable` for a test-only table against the PostgreSQL dialect; no database needed). (AC4)
 - [x] T6: `app/db/session.py`, the lifespan in `app/factory.py`, the two SQLAlchemy loggers in `app/core/logging.py`. Confirm `hide_parameters`, `join_transaction_mode` and `Depends(scope=...)` in the current docs before using them. (AC8)
 - [x] T7: `tests/db_support.py` and the fixtures in `tests/conftest.py`: `--require-services`, the test database URL, create-if-missing, skip or fail, `db_session` with rollback, the lifespan in the `client` fixture. (AC12, AC13)
-- [ ] T8: `tests/integration/test_db_session.py`. (AC5, AC6, AC7, AC11)
-- [ ] T9: `alembic.ini`, `app/db/autogenerate.py`, `env.py`, `script.py.mako`, the baseline revision; `tests/unit/test_autogenerate_filter.py` and `tests/integration/test_migrations.py`. (AC9, AC10)
+- [x] T8: `tests/integration/test_db_session.py`. (AC5, AC6, AC7, AC11)
+- [x] T9: `alembic.ini`, `app/db/autogenerate.py`, `env.py`, `script.py.mako`, the baseline revision; `tests/unit/test_autogenerate_filter.py` and `tests/integration/test_migrations.py`. (AC9, AC10)
 - [x] T10: Docs. `docs/tooling.md`: section 3 versions, section 4 commands (compose up, ps, down; `alembic downgrade base`, `alembic check`; `pytest --require-services`), section 5 note on the two passwords, section 6 note that CI sets `DATABASE_URL` and passes `--require-services`. `MEMORY.md`: D32 to D37, replace the `APP_ENV` collection gotcha, add the gotchas in section 9. `RULES.md` Dependencies: one sentence from D32. fastapi-conventions skill: `SessionDep`, the scope rule, background runs use the factory. Run all checks. (AC14)
 
 ## 7. Test plan
@@ -304,4 +304,12 @@ The second half of the original bullet, kept here so it is not lost.
 - New dependency for 003: `redis==8.1.0` (MIT).
 
 ## 10. Implementation notes
-(Filled in by /ship-feature.)
+- **Migration test database** is `<name>_migrations_test`, not `<name>_test_migrations`: the AC13 guard refuses any name not ending in `_test`, and the guard stays strict.
+- **`hide_input_in_errors=True`** on `Settings`: pydantic otherwise prints the raw input (the URL with its password) in a `ValidationError`.
+- **The `DATABASE_URL` check is a model validator** (`mode="after"`), not a field validator, because the prod password rule needs `app_env`.
+- **T3 and T4 share one commit**: T3 alone broke test collection, because `app.main` built the app at import.
+- **Alembic logging**: `env.py` treats a run as command-line when `config.cmd_opts` is set; tests run programmatically and leave logging alone. Offline `--sql` mode exits with a message.
+- **Compose limits** use `deploy.resources.limits`, confirmed with `docker compose config`. The Redis password reaches `redis-server` via `sh -c` so it is not baked into the command line in the file.
+- **Test settings** come from `tests/settings_support.make_settings`, which adds a dummy, never-connected `DATABASE_URL`.
+- **AC11 amended** during /test-feature with the owner's approval: Postgres's own error messages can quote the offending value, so only the log and SQLAlchemy's parameter dump are guaranteed clean. Gotcha added to MEMORY.md.
+- **Local setup found during testing**: a Homebrew `postgresql@18` service held port 5432 (owner stopped it), and `.env` initially had different values in `POSTGRES_PASSWORD` and `DATABASE_URL`.
