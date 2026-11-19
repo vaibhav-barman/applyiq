@@ -54,3 +54,9 @@ def test_mixins_add_uuid_id_and_timezone_aware_timestamps() -> None:
     assert "created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL" in table_ddl
     assert "updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL" in table_ddl
     assert _Parent.__table__.c.updated_at.onupdate is not None  # type: ignore[attr-defined]
+
+
+def test_timestamp_mixin_turns_on_eager_defaults() -> None:
+    # Without it, reading updated_at after an UPDATE raises MissingGreenlet under async.
+    assert _Parent.__mapper__.eager_defaults is True
+    assert _Child.__mapper__.eager_defaults is True

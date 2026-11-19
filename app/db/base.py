@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any, ClassVar
 
 from sqlalchemy import DateTime, MetaData, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -29,7 +30,15 @@ class UUIDPrimaryKeyMixin:
 
 
 class TimestampMixin:
-    """`created_at` and `updated_at`, set by the database. The session runs in UTC."""
+    """`created_at` and `updated_at`, set by the database. The session runs in UTC.
+
+    `eager_defaults=True` fetches both values with RETURNING on UPDATE as well as
+    INSERT. Without it `updated_at` is expired after an update, and reading it
+    under async raises MissingGreenlet. A model that sets its own `__mapper_args__`
+    must keep `eager_defaults=True`.
+    """
+
+    __mapper_args__: ClassVar[dict[str, Any]] = {"eager_defaults": True}
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

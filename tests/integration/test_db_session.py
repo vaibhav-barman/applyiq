@@ -103,16 +103,17 @@ async def test_update_moves_updated_at_and_keeps_created_at(widget_table: AsyncE
         widget = Widget(code="b")
         session.add(widget)
         await session.commit()
-        await session.refresh(widget)
         created, updated = widget.created_at, widget.updated_at
     async with factory() as session:
         await session.execute(text("SELECT pg_sleep(0.01)"))
         stored = await session.get_one(Widget, widget.id)
         stored.code = "b2"
         await session.commit()
-        await session.refresh(stored)
-    assert stored.created_at == created
-    assert stored.updated_at > updated
+        # No refresh: eager_defaults must load the new value, or this read would try
+        # a lazy load, which raises MissingGreenlet under async.
+        new_created, new_updated = stored.created_at, stored.updated_at
+    assert new_created == created
+    assert new_updated > updated
 
 
 # ---- AC6, AC7: commit and rollback through SessionDep ----
