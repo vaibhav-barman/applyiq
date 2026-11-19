@@ -11,9 +11,9 @@ import structlog
 from fastapi import FastAPI, Response
 
 from app.api.routers import API_V1_PREFIX
-from app.core.config import Settings
 from app.core.logging import ALLOWED_KEYS
 from tests.conftest import AppFactory, parse_log_lines
+from tests.settings_support import make_settings
 
 CLIENT_REQUEST_ID = {"X-Request-ID": "attacker-chosen"}
 
@@ -165,7 +165,7 @@ async def test_log_level_setting_filters_access_lines(
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR"],
     expected_lines: int,
 ) -> None:
-    app_settings = Settings(_env_file=None, app_env="test", log_level=level)
+    app_settings = make_settings(app_env="test", log_level=level)
     transport = httpx.ASGITransport(app=make_app(app_settings))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         response = await http_client.get("/api/v1/health")
@@ -176,7 +176,7 @@ async def test_log_level_setting_filters_access_lines(
 async def test_error_level_still_logs_an_unhandled_failure(
     make_app: AppFactory, log_stream: io.StringIO
 ) -> None:
-    application = make_app(Settings(_env_file=None, app_env="test", log_level="ERROR"))
+    application = make_app(make_settings(app_env="test", log_level="ERROR"))
 
     async def boom() -> None:
         raise RuntimeError("boom")
@@ -194,7 +194,7 @@ async def test_error_level_still_logs_an_unhandled_failure(
 async def test_prod_has_no_docs_route_and_logs_it_as_unmatched(
     make_app: AppFactory, log_stream: io.StringIO
 ) -> None:
-    application = make_app(Settings(_env_file=None, app_env="prod"))
+    application = make_app(make_settings(app_env="prod"))
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         response = await http_client.get("/api/v1/docs")

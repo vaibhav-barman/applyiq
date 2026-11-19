@@ -12,7 +12,8 @@ from fastapi import FastAPI
 
 from app.core.config import Settings
 from app.core.logging import configure_logging
-from app.main import create_app
+from app.factory import create_app
+from tests.settings_support import make_settings
 
 AppFactory = Callable[[Settings], FastAPI]
 
@@ -20,7 +21,7 @@ AppFactory = Callable[[Settings], FastAPI]
 @pytest.fixture
 def settings() -> Settings:
     """Test settings that never read the developer's `.env` file."""
-    return Settings(_env_file=None, app_env="test")
+    return make_settings(app_env="test")
 
 
 @pytest.fixture
