@@ -54,6 +54,8 @@ _UVICORN_ACCESS = "uvicorn.access"
 # HTTP client libraries log every request URL, query string included, at INFO. A URL
 # can carry an API key or a search term, so they only log from WARNING up.
 # SQLAlchemy's engine and pool loggers print SQL text and parameter values at INFO.
+# SQLAlchemy already defaults its parent logger to WARNING; holding the two children
+# here is defence in depth in case anything raises the parent's level.
 _QUIET_LOGGERS = ("httpx", "httpcore", "sqlalchemy.engine", "sqlalchemy.pool")
 
 _installed_handler: logging.Handler | None = None
@@ -99,6 +101,18 @@ def redact_pii(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
     return event_dict
 
 
+# Database driver loggers whose messages can quote a server error, and Postgres errors
+# can quote user input ("Key (email)=(...) already exists"). Their text is replaced.
+_DATABASE_LOGGER_PREFIXES = ("psycopg", "sqlalchemy")
+DATABASE_DRIVER_EVENT = "db_driver_message"
+
+
+def _is_database_logger(name: object) -> bool:
+    return isinstance(name, str) and any(
+        name == prefix or name.startswith(f"{prefix}.") for prefix in _DATABASE_LOGGER_PREFIXES
+    )
+
+
 # Keys structlog's ProcessorFormatter adds to a foreign record and removes itself later.
 _FORMATTER_META_KEYS = ("_record", "_from_structlog")
 
@@ -107,9 +121,12 @@ def sanitize_foreign(logger: WrappedLogger, method_name: str, event_dict: EventD
     """Apply the allow-list, value limits and redaction to another library's record.
 
     Its message is free text, but exc_info, stack_info and any other extra key are
-    dropped. The formatter's own meta keys are set aside and put back afterwards.
+    dropped. A database driver's message is replaced with a fixed event, keeping its
+    level and logger name. The formatter's own meta keys are set aside and put back.
     """
     meta = {key: event_dict[key] for key in _FORMATTER_META_KEYS if key in event_dict}
+    if _is_database_logger(event_dict.get("logger")):
+        event_dict["event"] = DATABASE_DRIVER_EVENT
     cleaned = drop_unlisted_keys(logger, method_name, event_dict)
     cleaned = limit_values(logger, method_name, cleaned)
     cleaned = redact_pii(logger, method_name, cleaned)

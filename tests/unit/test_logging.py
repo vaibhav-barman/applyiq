@@ -10,7 +10,13 @@ from typing import Any
 import pytest
 import structlog
 
-from app.core.logging import ALLOWED_KEYS, MAX_VALUE_LENGTH, configure_logging, redact_pii
+from app.core.logging import (
+    ALLOWED_KEYS,
+    DATABASE_DRIVER_EVENT,
+    MAX_VALUE_LENGTH,
+    configure_logging,
+    redact_pii,
+)
 
 
 @pytest.fixture
@@ -169,6 +175,41 @@ def test_configuring_twice_does_not_duplicate_lines(stream: io.StringIO) -> None
 def test_noisy_libraries_stay_below_warning(stream: io.StringIO, name: str) -> None:
     logging.getLogger(name).info('HTTP Request: GET https://api.example.com/?key=secret "200 OK"')
     assert stream.getvalue() == ""
+
+
+@pytest.mark.parametrize("name", ["sqlalchemy.engine", "sqlalchemy.pool"])
+def test_sqlalchemy_loggers_are_held_even_if_the_parent_is_raised(name: str) -> None:
+    """SQLAlchemy defaults its parent to WARNING, so test with the parent at INFO:
+    only our own hold keeps SQL text and parameters out."""
+    parent = logging.getLogger("sqlalchemy")
+    previous = parent.level
+    parent.setLevel(logging.INFO)
+    try:
+        buffer = io.StringIO()
+        configure_logging("INFO", stream=buffer)
+        assert logging.getLogger(name).level == logging.WARNING
+        logging.getLogger(name).info("SELECT secret_column FROM t WHERE x = %s", "zq7")
+        assert buffer.getvalue() == ""
+    finally:
+        parent.setLevel(previous)
+
+
+@pytest.mark.parametrize("name", ["psycopg", "psycopg.pool", "sqlalchemy", "sqlalchemy.pool"])
+def test_database_driver_messages_are_replaced(stream: io.StringIO, name: str) -> None:
+    sentinel = "Key (code)=(zq7-sentinel) already exists"
+    logging.getLogger(name).warning("error ignored in rollback on %s: %s", "conn", sentinel)
+    [entry] = lines(stream)
+    assert entry["event"] == DATABASE_DRIVER_EVENT
+    assert entry["logger"] == name
+    assert entry["level"] == "warning"
+    assert "zq7" not in stream.getvalue()
+
+
+@pytest.mark.parametrize("name", ["psycopgish", "alembic.runtime.migration", "uvicorn.error"])
+def test_other_library_messages_are_kept(stream: io.StringIO, name: str) -> None:
+    logging.getLogger(name).warning("Running upgrade baseline")
+    [entry] = lines(stream)
+    assert entry["event"] == "Running upgrade baseline"
 
 
 def test_level_filters_records(stream: io.StringIO) -> None:
