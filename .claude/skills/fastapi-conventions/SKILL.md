@@ -31,7 +31,7 @@ Raise `AppError(code="job_not_found", status=404, detail="...")`; a handler retu
 - Get a session in a route with `SessionDep` (`app/db/session.py`). It commits when the handler returns and rolls back if it raises. It uses `Depends(scope="function")` so the commit runs before the response; any `yield` dependency that depends on `SessionDep` must also use `scope="function"`.
 - Repositories and services never commit; the request's `SessionDep` does.
 - Background graph runs build their own sessions from `app.state.session_factory` (an `async_sessionmaker`) and never use `get_session`, which belongs to one HTTP request.
-- Models inherit `Base` plus `UUIDPrimaryKeyMixin` and `TimestampMixin` from `app/db/base.py`, and their module is imported in `app/db/models/__init__.py` so autogenerate sees it. Constraints are named by `NAMING_CONVENTION`.
+- Models inherit `Base` plus `UUIDPrimaryKeyMixin` and `TimestampMixin` from `app/db/base.py`, and their module is imported in `app/db/models/__init__.py` so autogenerate sees it. Constraints are named by `NAMING_CONVENTION`. `TimestampMixin` turns on `eager_defaults`; a model with its own `__mapper_args__` must keep `"eager_defaults": True`.
 - Tests that touch Postgres are marked `db` and use the `db_session` fixture (rolled back after each test).
 - LangGraph's checkpoint tables are not ours. They live in the `langgraph` schema; `app/db/autogenerate.py` excludes them from autogenerate; a migration must never create, alter or drop them.
 

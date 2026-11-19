@@ -212,9 +212,10 @@ def test_prod_rejects_missing_or_placeholder_password(url: str) -> None:
 
 def test_prod_accepts_a_real_password() -> None:
     settings = make_settings(
-        app_env="prod", database_url=f"postgresql+psycopg://u:{SENTINEL}@db:5432/app"
+        app_env="prod",
+        database_url=f"postgresql+psycopg://u:{SENTINEL}@db:5432/app?sslmode=require",
     )
-    assert settings.database_url.get_secret_value().endswith("/app")
+    assert settings.database_url.get_secret_value().endswith("/app?sslmode=require")
 
 
 def test_dev_accepts_the_placeholder_password() -> None:
@@ -315,7 +316,53 @@ def test_non_prod_environments_accept_a_missing_password(app_env: str) -> None:
 
 def test_prod_only_rejects_the_documented_placeholders() -> None:
     """Only `change-me` exactly and the `REPLACE_WITH` prefix are placeholders."""
-    make_settings(app_env="prod", database_url="postgresql+psycopg://u:change-me-not@db:5432/app")
+    make_settings(
+        app_env="prod",
+        database_url="postgresql+psycopg://u:change-me-not-really-x@db:5432/app?sslmode=require",
+    )
+
+
+@pytest.mark.parametrize("password", ["Change-Me", "CHANGE-ME", "replace_with_x_long_enough"])
+def test_prod_placeholders_match_in_any_case(password: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(
+            app_env="prod",
+            database_url=f"postgresql+psycopg://u:{password}@db:5432/app?sslmode=require",
+        )
+    assert "placeholder password" in str(caught.value)
+    assert password not in str(caught.value)
+
+
+def test_prod_rejects_a_short_password() -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(
+            app_env="prod",
+            database_url="postgresql+psycopg://u:zq7short@db:5432/app?sslmode=require",
+        )
+    assert "at least 16 characters" in str(caught.value)
+    assert "zq7short" not in str(caught.value)
+
+
+@pytest.mark.parametrize("query", ["", "?sslmode=disable", "?sslmode=prefer", "?sslmode=allow"])
+def test_prod_requires_tls(query: str) -> None:
+    with pytest.raises(ValidationError) as caught:
+        make_settings(
+            app_env="prod", database_url=f"postgresql+psycopg://u:{SENTINEL}@db:5432/app{query}"
+        )
+    assert "sslmode=require, verify-ca or verify-full" in str(caught.value)
+    assert SENTINEL not in str(caught.value)
+
+
+@pytest.mark.parametrize("mode", ["require", "verify-ca", "verify-full"])
+def test_prod_accepts_each_tls_mode(mode: str) -> None:
+    make_settings(
+        app_env="prod", database_url=f"postgresql+psycopg://u:{SENTINEL}@db:5432/app?sslmode={mode}"
+    )
+
+
+@pytest.mark.parametrize("app_env", ["dev", "test"])
+def test_non_prod_needs_neither_tls_nor_a_long_password(app_env: str) -> None:
+    make_settings(app_env=app_env, database_url="postgresql+psycopg://u:pw@127.0.0.1:5432/app")
 
 
 @pytest.mark.parametrize(
@@ -356,13 +403,17 @@ def test_pool_setting_out_of_range_in_the_environment_is_rejected(
 def test_env_example_has_no_password_values() -> None:
     lines = (REPO_ROOT / ".env.example").read_text().splitlines()
     assert "POSTGRES_PASSWORD=" in lines
+    assert "APP_DB_PASSWORD=" in lines
     assert "REDIS_PASSWORD=" in lines
 
 
 def test_env_example_database_settings_are_read(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATABASE_URL")
     settings = Settings(_env_file=REPO_ROOT / ".env.example")
-    assert "REPLACE_WITH_POSTGRES_PASSWORD" in settings.database_url.get_secret_value()
+    url = settings.database_url.get_secret_value()
+    assert "REPLACE_WITH_APP_DB_PASSWORD" in url
+    # The app connects as the non-superuser role, not the bootstrap POSTGRES_USER.
+    assert url.startswith("postgresql+psycopg://applyiq_app:")
     assert settings.db_pool_recycle_seconds == 1800
 
 
@@ -385,6 +436,8 @@ def test_env_example_lists_every_database_variable() -> None:
         "POSTGRES_DB",
         "POSTGRES_PORT",
         "POSTGRES_PASSWORD",
+        "APP_DB_USER",
+        "APP_DB_PASSWORD",
         "DATABASE_URL",
         "REDIS_PORT",
         "REDIS_PASSWORD",

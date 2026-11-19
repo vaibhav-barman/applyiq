@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import Settings
+from app.db import session as session_module
 from app.db.base import NAMING_CONVENTION, TimestampMixin, UUIDPrimaryKeyMixin
 from app.db.session import SessionDep, build_engine, build_session_factory
 from tests.conftest import AppFactory
@@ -224,14 +225,30 @@ async def test_app_serves_health_with_postgres_unreachable_and_disposes_engine(
     assert disposed == [engine]
 
 
-def test_engine_uses_the_pool_settings() -> None:
-    settings = make_settings(
-        db_pool_size=3, db_max_overflow=2, db_pool_timeout_seconds=4, db_pool_recycle_seconds=90
+def test_engine_uses_the_pool_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Checks what build_engine asks SQLAlchemy for, not the pool's private attributes."""
+    captured: dict[str, Any] = {}
+    real_create = session_module.create_async_engine
+
+    def spy(url: str, **kwargs: Any) -> AsyncEngine:
+        captured.update(kwargs)
+        return real_create(url, **kwargs)
+
+    monkeypatch.setattr(session_module, "create_async_engine", spy)
+    build_engine(
+        make_settings(
+            db_pool_size=3, db_max_overflow=2, db_pool_timeout_seconds=4, db_pool_recycle_seconds=90
+        )
     )
-    engine = build_engine(settings)
-    pool = engine.sync_engine.pool
-    assert (pool.size(), pool._max_overflow, pool._timeout, pool._recycle) == (3, 2, 4, 90)  # type: ignore[attr-defined]
-    assert pool._pre_ping is True  # type: ignore[attr-defined]
+    assert {key: captured[key] for key in ("pool_size", "max_overflow", "pool_timeout")} == {
+        "pool_size": 3,
+        "max_overflow": 2,
+        "pool_timeout": 4,
+    }
+    assert captured["pool_recycle"] == 90
+    assert captured["pool_pre_ping"] is True
+    assert captured["hide_parameters"] is True
+    assert captured["connect_args"] == {"options": "-c timezone=utc"}
 
 
 def test_engine_creation_opens_no_connection_and_uses_the_psycopg_driver() -> None:
@@ -275,3 +292,14 @@ async def test_failed_statement_leaks_no_parameter_or_sql(
     logged = log_stream.getvalue()
     assert SENTINEL not in logged
     assert "SELECT" not in logged
+
+
+@pytest.mark.db
+async def test_tests_and_app_connect_as_a_non_superuser(db_session: AsyncSession) -> None:
+    """The app role from docker/postgres/initdb, not the bootstrap superuser."""
+    row = (
+        await db_session.execute(
+            text("SELECT rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user")
+        )
+    ).one()
+    assert tuple(row) == (False, False)

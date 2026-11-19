@@ -142,7 +142,7 @@ The API and the Vite dev server run on the host during development. Tests marked
 - A new variable is added to `.env.example` in the same commit, with a one-line comment and no real value.
 - Secrets have no default. The app refuses to start in `prod` if a secret is missing or still set to `change-me`.
 - Model names are config, never code.
-- Postgres and Redis passwords: generate each with `openssl rand -hex 24`. The Postgres one goes in both `POSTGRES_PASSWORD` (read by docker compose) and `DATABASE_URL` (read by the app); the Redis one in `REDIS_PASSWORD` and `REDIS_URL`. `docker compose` refuses to start without them.
+- Three local passwords, each from `openssl rand -hex 24`: `POSTGRES_PASSWORD` (the bootstrap superuser, compose only), `APP_DB_PASSWORD` (the `applyiq_app` role, also in `DATABASE_URL`) and `REDIS_PASSWORD` (also in `REDIS_URL`). `docker compose` refuses to start without them. The app role is created only when the Postgres volume is first made; after changing `APP_DB_*`, run `docker compose down -v` and `up -d`.
 
 ## 6. CI outline (GitHub Actions)
 

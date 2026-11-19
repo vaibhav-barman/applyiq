@@ -56,7 +56,7 @@ def test_postgres_volume_uses_the_postgres_18_path() -> None:
     assert "- postgres_data:/var/lib/postgresql\n" in service_block("postgres")
 
 
-@pytest.mark.parametrize("variable", ["POSTGRES_PASSWORD", "REDIS_PASSWORD"])
+@pytest.mark.parametrize("variable", ["POSTGRES_PASSWORD", "APP_DB_PASSWORD", "REDIS_PASSWORD"])
 def test_passwords_are_required(variable: str) -> None:
     assert f"${{{variable}:?Set {variable} in .env}}" in COMPOSE
 
@@ -98,3 +98,19 @@ def test_redis_password_is_not_a_process_argument() -> None:
     assert "--requirepass" not in block
     assert "exec redis-server - " in block
     assert "requirepass $$REDIS_PASSWORD" in block
+
+
+def test_postgres_runs_the_app_role_init_script() -> None:
+    block = service_block("postgres")
+    assert "- ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro\n" in block
+    assert "APP_DB_USER: ${APP_DB_USER:-applyiq_app}" in block
+
+
+def test_app_role_script_creates_a_non_superuser_without_splicing_secrets() -> None:
+    script = (REPO_ROOT / "docker/postgres/initdb/01-app-role.sh").read_text()
+    assert "NOSUPERUSER" in script
+    assert "NOCREATEROLE" in script
+    # psql quotes the values itself; the shell never puts them in the SQL text.
+    assert "PASSWORD :'app_password'" in script
+    assert "<<'SQL'" in script
+    assert "$APP_DB_PASSWORD" not in script.split("<<'SQL'")[1]

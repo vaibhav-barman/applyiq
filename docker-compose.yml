@@ -10,12 +10,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-applyiq}
       POSTGRES_DB: ${POSTGRES_DB:-applyiq}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      # The non-superuser role the app connects as, created by docker/postgres/initdb.
+      APP_DB_USER: ${APP_DB_USER:-applyiq_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
     command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50"]
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       # Postgres 18 images keep data under /var/lib/postgresql, not .../data.
       - postgres_data:/var/lib/postgresql
+      # Runs only when the volume is first created. After changing it: docker compose down -v.
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s

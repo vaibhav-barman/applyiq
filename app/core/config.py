@@ -9,7 +9,10 @@ from sqlalchemy.engine import URL, make_url
 
 _DATABASE_DRIVER = "postgresql+psycopg"
 _PLACEHOLDER_EXACT = "change-me"
-_PLACEHOLDER_PREFIX = "REPLACE_WITH"
+_PLACEHOLDER_PREFIX = "replace_with"
+_PROD_MIN_PASSWORD_LENGTH = 16
+# SECURITY.md section 4: Postgres over TLS in production.
+_PROD_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 
 
 class Settings(BaseSettings):
@@ -43,6 +46,7 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must include a database name")
         if self.app_env == "prod":
             _check_prod_password(url)
+            _check_prod_tls(url)
         return self
 
 
@@ -58,8 +62,22 @@ def _check_prod_password(url: URL) -> None:
     password = url.password
     if not password:
         raise ValueError("DATABASE_URL must include a password when APP_ENV=prod")
-    if password == _PLACEHOLDER_EXACT or password.startswith(_PLACEHOLDER_PREFIX):
+    lowered = password.lower()
+    if lowered == _PLACEHOLDER_EXACT or lowered.startswith(_PLACEHOLDER_PREFIX):
         raise ValueError("DATABASE_URL must not use a placeholder password when APP_ENV=prod")
+    if len(password) < _PROD_MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"DATABASE_URL password must be at least {_PROD_MIN_PASSWORD_LENGTH} characters "
+            "when APP_ENV=prod"
+        )
+
+
+def _check_prod_tls(url: URL) -> None:
+    ssl_mode = url.query.get("sslmode")
+    if ssl_mode not in _PROD_SSL_MODES:
+        raise ValueError(
+            "DATABASE_URL must set sslmode=require, verify-ca or verify-full when APP_ENV=prod"
+        )
 
 
 @lru_cache
