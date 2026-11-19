@@ -9,6 +9,9 @@ dependencies = [
     "pydantic==2.14.3",
     "pydantic-settings==2.16.3",
     "structlog==26.1.0",
+    "sqlalchemy[asyncio]==2.1.9",
+    "psycopg[binary]==3.3.9",
+    "alembic==1.20.1",
 ]
 
 [dependency-groups]
@@ -47,7 +50,11 @@ init_typed = true
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["llm: calls a real model; skipped unless run with -m llm"]
+testpaths = ["tests"]
+markers = [
+    "llm: calls a real model; skipped unless run with -m llm",
+    "db: needs Postgres (docker compose up -d postgres); skipped when it is unreachable",
+]
 addopts = "-m 'not llm' --import-mode=importlib"
 
 [tool.coverage.run]
