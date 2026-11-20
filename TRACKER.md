@@ -11,7 +11,8 @@ Hours are estimates at about 15 hours a week. Total to the MVP line: about 170 h
 ## Phase 0: Foundation (about 18 h)
 Read `docs/tooling.md` first.
 - [x] Backend scaffold: flat layout per ARCHITECTURE.md section 8 (delete `src/`, fix `pyproject.toml` per `docs/tooling.md`), uv dependency groups, ruff, mypy, pytest, config (pydantic-settings), allow-list structured logging, `GET /api/v1/health` (spec: `.claude/specs/001-backend-scaffold.md`)
-- [ ] Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration
+- [x] Local services and database: docker-compose (postgres, redis), SQLAlchemy async session on psycopg 3, Alembic baseline migration (spec: `.claude/specs/002-database-foundation.md`)
+- [ ] Redis client and readiness: `REDIS_URL` setting, Redis client factory, readiness route that checks Postgres and Redis
 - [ ] CI and pre-commit: GitHub Actions (lint, format check, types, tests, lock check, pip-audit, gitleaks), pre-commit config including the secret scan and no-commit-to-main
 - [ ] Frontend scaffold: Vite + React (JS), React Router, TanStack Query, ESLint/Prettier, Vitest, Vite dev proxy to /api, frontend job added to CI
 - [ ] Design system: `tokens.css` (colors, type scale, spacing, radius), self-hosted Schibsted Grotesk + Newsreader, base components (Button, Input, FitBadge, Rule, Rail layout). Light theme only.
@@ -75,4 +76,6 @@ Read `docs/job-sources.md` first.
 
 ## Log
 - 2026-11-17 Fable design review applied: docs and Claude Code config corrected, scope cut and reordered. No code yet.
-- 2026-11-17 Spec 001 backend scaffold done: flat layout, pinned dependencies, typed settings, allow-list JSON logging, request-id middleware, `GET /api/v1/health`. 132 tests, reviewed by a code and a security reviewer. Pending merge.
+- 2026-11-17 Spec 001 backend scaffold done: flat layout, pinned dependencies, typed settings, allow-list JSON logging, request-id middleware, `GET /api/v1/health`. 132 tests, reviewed by a code and a security reviewer. Merged (PR #1).
+- 2026-11-17 Phase 0 bullet 2 split in two while writing spec 002 (it was about 6.5 hours): the database foundation, then the Redis client and readiness route.
+- 2026-11-20 Spec 002 database foundation done: docker-compose (pgvector Postgres 18, Redis 8, localhost-only, least-privilege app role), DATABASE_URL settings with prod checks, async SQLAlchemy session with commit-before-response, Alembic baseline that ignores the LangGraph checkpoint tables, test database fixtures with `--require-services`. 321 tests. Code and security review: 1 Major and 9 Minors, all fixed.

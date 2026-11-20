@@ -82,7 +82,7 @@ ApplyIQ handles resumes (personal data) and feeds untrusted job text into LLMs. 
 
 ## 9. Dependency and supply chain
 - `pip-audit` and `npm audit` in CI. Exact pins and a committed `uv.lock`; CI fails if the lock is stale. Dependabot or equivalent.
-- No AGPL or GPL dependencies.
+- No AGPL or GPL dependencies. The rule covers code we link or ship: an LGPL library used unmodified (psycopg) is allowed, and an unmodified service container (Redis 8) is not a dependency (MEMORY.md D32).
 - Docker: slim base, non-root user, no secrets baked into images.
 
 ## 10. Security checklist per spec

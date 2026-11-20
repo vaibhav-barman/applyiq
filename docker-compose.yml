@@ -1,0 +1,72 @@
+# Local development services. Start with: docker compose up -d
+# Both ports bind to 127.0.0.1 only. Passwords come from .env (see .env.example).
+name: applyiq
+
+services:
+  postgres:
+    # The official postgres image plus the pgvector extension files (not enabled until P1).
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-applyiq}
+      POSTGRES_DB: ${POSTGRES_DB:-applyiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      # The non-superuser role the app connects as, created by docker/postgres/initdb.
+      APP_DB_USER: ${APP_DB_USER:-applyiq_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50"]
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql, not .../data.
+      - postgres_data:/var/lib/postgresql
+      # Runs only when the volume is first created. After changing it: docker compose down -v.
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1"
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.8.4-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      # redis-cli reads this, so the healthcheck needs no password on the command line.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    # noeviction: rate-limit counters and run event streams must never vanish silently.
+    # The password is passed as config on stdin ("-"), so it never appears in the
+    # process arguments that `ps` or `docker top` show. exec keeps redis as PID 1.
+    command:
+      - sh
+      - -c
+      - |
+        exec redis-server - --maxmemory 128mb --maxmemory-policy noeviction <<EOF
+        requirepass $$REDIS_PASSWORD
+        EOF
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: "0.5"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

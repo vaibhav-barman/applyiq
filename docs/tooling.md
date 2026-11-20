@@ -81,13 +81,16 @@ These are newer than what a model remembers. Read the library's current docs bef
 | langchain-mcp-adapters | 0.3.2 | |
 | fastmcp / mcp | 4.2.0 / 2.3.0 | Major versions newer than most examples online. |
 | fastapi | 0.163.1 | |
-| sqlalchemy | 2.1.9 | |
-| psycopg (binary) | 3.3.9 | The only Postgres driver in this project. |
+| sqlalchemy[asyncio] | 2.1.9 | 2.1 no longer installs greenlet by default; the `asyncio` extra adds it. |
+| psycopg (binary) | 3.3.9 | The only Postgres driver in this project. LGPL-3.0, allowed as an unmodified library (D32). |
+| alembic | 1.20.1 | Async `env.py` template. |
 | pydantic-core | 2.50.4 | |
 | pypdf | 7.1.0 | BSD licence. |
 | pgvector | 0.5.1 | P1 only. |
 
 Every package above has wheels for Python 3.14.
+
+Container images (spec 002): `pgvector/pgvector:0.8.7-pg18-trixie` (Postgres 18 with the pgvector files; the extension is not enabled until P1) and `redis:8.8.4-alpine`. The CI service container uses the same Postgres tag.
 
 ## 4. Commands
 
@@ -102,8 +105,11 @@ Backend, from the repo root:
 | Tests | `uv run pytest -q` |
 | Tests that call a real model | `uv run pytest -m llm` |
 | Graph and grounding tests | `uv run pytest tests/graphs tests/grounding -q` |
+| Tests, failing instead of skipping when Postgres is down (CI) | `uv run pytest -q --require-services` |
 | New migration | `uv run alembic revision --autogenerate -m "..."` |
 | Apply migrations | `uv run alembic upgrade head` |
+| Undo every migration | `uv run alembic downgrade base` |
+| Check models and migrations agree | `uv run alembic check` |
 | Run the API | `uv run uvicorn app.main:app --reload` |
 
 Frontend, from the repo root (the `--prefix` form matches the permission rules in `.claude/settings.json`):
@@ -118,7 +124,16 @@ Frontend, from the repo root (the `--prefix` form matches the permission rules i
 
 `frontend/package.json` must define the scripts `dev`, `build`, `lint`, `format` and `test` (with `test` set to `vitest`).
 
-Local services: `docker compose up -d postgres redis`. The API and the Vite dev server run on the host during development.
+Local services (both bind to 127.0.0.1 only):
+
+| Purpose | Command |
+|---|---|
+| Start | `docker compose up -d` |
+| Status and health | `docker compose ps` |
+| Stop, keeping data | `docker compose down` |
+| Stop and delete all data | `docker compose down -v` (careful) |
+
+The API and the Vite dev server run on the host during development. Tests marked `db` use the database `<name>_test` on the same server, create it if missing, and skip with the start command when Postgres is down.
 
 ## 5. Environment variables
 
@@ -127,6 +142,7 @@ Local services: `docker compose up -d postgres redis`. The API and the Vite dev 
 - A new variable is added to `.env.example` in the same commit, with a one-line comment and no real value.
 - Secrets have no default. The app refuses to start in `prod` if a secret is missing or still set to `change-me`.
 - Model names are config, never code.
+- Three local passwords, each from `openssl rand -hex 24`: `POSTGRES_PASSWORD` (the bootstrap superuser, compose only), `APP_DB_PASSWORD` (the `applyiq_app` role, also in `DATABASE_URL`) and `REDIS_PASSWORD` (also in `REDIS_URL`). `docker compose` refuses to start without them. The app role is created only when the Postgres volume is first made; after changing `APP_DB_*`, run `docker compose down -v` and `up -d`.
 
 ## 6. CI outline (GitHub Actions)
 
@@ -134,7 +150,7 @@ One workflow, `.github/workflows/ci.yml`, on pull requests and on pushes to `mai
 
 | Job | Steps |
 |---|---|
-| backend | Check out. Install uv with caching. `uv sync --frozen`. `ruff check`, `ruff format --check`, `mypy app mcp_servers`. `pytest` with coverage for `app/services` and `app/graphs`. Postgres and Redis as service containers. |
+| backend | Check out. Install uv with caching. `uv sync --frozen`. `ruff check`, `ruff format --check`, `mypy app mcp_servers`. `pytest` with coverage for `app/services` and `app/graphs`. Postgres (`pgvector/pgvector:0.8.7-pg18-trixie`) and Redis as service containers; `DATABASE_URL` set in the job environment; `pytest --require-services`, so a missing service fails instead of skipping. |
 | security | Fail if `uv.lock` is out of date. Export the lockfile to requirements format and run `pip-audit` on it. Run gitleaks over the diff. |
 | frontend | Runs only when `frontend/` exists. Node with npm caching. `npm ci`, lint, `vitest --run`, `vite build`, `npm audit` at high severity. |
 

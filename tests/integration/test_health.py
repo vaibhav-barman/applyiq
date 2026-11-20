@@ -9,9 +9,9 @@ import pytest
 from fastapi import APIRouter, FastAPI
 
 from app.api.routers import API_V1_PREFIX
-from app.core.config import Settings
 from app.core.logging import ALLOWED_KEYS
 from tests.conftest import AppFactory, parse_log_lines
+from tests.settings_support import make_settings
 
 
 async def test_health_returns_ok(client: httpx.AsyncClient) -> None:
@@ -104,7 +104,7 @@ async def test_unhandled_error_logs_request_failed(
 async def test_docs_are_off_in_prod(
     make_app: AppFactory, app_env: Literal["dev", "test", "prod"], expected_status: int
 ) -> None:
-    app_settings = Settings(_env_file=None, app_env=app_env)
+    app_settings = make_settings(app_env=app_env)
     transport = httpx.ASGITransport(app=make_app(app_settings))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         docs = await http_client.get("/api/v1/docs")

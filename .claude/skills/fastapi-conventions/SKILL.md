@@ -28,7 +28,12 @@ Raise `AppError(code="job_not_found", status=404, detail="...")`; a handler retu
 - SQLAlchemy 2 async on the psycopg 3 driver (`postgresql+psycopg://`). It is the only Postgres driver in the project.
 - `Mapped[...]` typed models, UUID primary keys, `created_at/updated_at` in UTC.
 - Every model change ships with an Alembic migration (`uv run alembic revision --autogenerate -m "..."`), reviewed by hand.
-- LangGraph's checkpoint tables are not ours. Alembic's `env.py` excludes them from autogenerate; a migration must never create, alter or drop them.
+- Get a session in a route with `SessionDep` (`app/db/session.py`). It commits when the handler returns and rolls back if it raises. It uses `Depends(scope="function")` so the commit runs before the response; any `yield` dependency that depends on `SessionDep` must also use `scope="function"`.
+- Repositories and services never commit; the request's `SessionDep` does.
+- Background graph runs build their own sessions from `app.state.session_factory` (an `async_sessionmaker`) and never use `get_session`, which belongs to one HTTP request.
+- Models inherit `Base` plus `UUIDPrimaryKeyMixin` and `TimestampMixin` from `app/db/base.py`, and their module is imported in `app/db/models/__init__.py` so autogenerate sees it. Constraints are named by `NAMING_CONVENTION`. `TimestampMixin` turns on `eager_defaults`; a model with its own `__mapper_args__` must keep `"eager_defaults": True`.
+- Tests that touch Postgres are marked `db` and use the `db_session` fixture (rolled back after each test).
+- LangGraph's checkpoint tables are not ours. They live in the `langgraph` schema; `app/db/autogenerate.py` excludes them from autogenerate; a migration must never create, alter or drop them.
 
 ## Long tasks
 - `POST /applications/{id}/prepare` creates a `runs` row, starts the graph as an asyncio task, and returns `202` with the run id. Honour the `Idempotency-Key` header; if an active run exists, return it.

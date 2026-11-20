@@ -92,5 +92,13 @@ def test_dev_group_exists_and_is_covered_by_the_pin_check() -> None:
     assert set(dev) <= set(all_requirements(pyproject))
 
 
+@pytest.mark.parametrize(
+    "requirement",
+    ["sqlalchemy[asyncio]==2.1.9", "psycopg[binary]==3.3.9", "alembic==1.20.1"],
+)
+def test_database_dependencies_are_pinned(requirement: str) -> None:
+    assert requirement in load_pyproject()["project"]["dependencies"]
+
+
 def test_lock_file_is_present() -> None:
     assert (REPO_ROOT / "uv.lock").is_file()
